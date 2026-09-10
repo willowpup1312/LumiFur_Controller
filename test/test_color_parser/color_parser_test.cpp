@@ -356,6 +356,59 @@ void test_rejects_invalid_inputs(void)
   TEST_ASSERT_FALSE(parseColorPayload(reinterpret_cast<const uint8_t *>(payload), sizeof(payload) - 1, color, hex));
 }
 
+
+void test_invalid_hex_digit_at_each_position_preserves_color(void)
+{
+  for (size_t position = 0; position < 6; ++position)
+  {
+    // Exercise invalid characters both below and above the accepted ranges.
+    for (char invalid : {'/', ':', '@', 'G'})
+    {
+      std::string digits = "12ABef";
+      digits[position] = invalid;
+      RgbColor color{17, 34, 51};
+      TEST_ASSERT_FALSE(parseHexColorDigits(digits, color));
+      TEST_ASSERT_EQUAL_UINT8(17, color.r);
+      TEST_ASSERT_EQUAL_UINT8(34, color.g);
+      TEST_ASSERT_EQUAL_UINT8(51, color.b);
+    }
+  }
+}
+
+void test_ascii_uppercase_prefix_and_semicolon_components(void)
+{
+  RgbColor color{};
+  TEST_ASSERT_TRUE(parseColorFromAscii("0X12abEF", color));
+  TEST_ASSERT_EQUAL_STRING("12ABEF", colorToHexString(color).c_str());
+  TEST_ASSERT_TRUE(parseColorFromAscii("12;34;56", color));
+  TEST_ASSERT_EQUAL_UINT8(12, color.r);
+  TEST_ASSERT_EQUAL_UINT8(34, color.g);
+  TEST_ASSERT_EQUAL_UINT8(56, color.b);
+  TEST_ASSERT_TRUE(parseColorFromAscii("0;1;2", color));
+  TEST_ASSERT_EQUAL_STRING("000102", colorToHexString(color).c_str());
+}
+
+void test_empty_or_missing_payload_preserves_outputs(void)
+{
+  const uint8_t data[] = {1, 2, 3};
+  RgbColor color{17, 34, 51};
+  std::string normalized = "112233";
+  TEST_ASSERT_FALSE(parseColorPayload(data, 0, color, normalized));
+  TEST_ASSERT_FALSE(parseColorPayload(nullptr, 3, color, normalized));
+  TEST_ASSERT_EQUAL_UINT8(17, color.r);
+  TEST_ASSERT_EQUAL_UINT8(34, color.g);
+  TEST_ASSERT_EQUAL_UINT8(51, color.b);
+  TEST_ASSERT_EQUAL_STRING("112233", normalized.c_str());
+}
+
+void test_single_character_ascii_input_is_rejected(void)
+{
+  RgbColor color{};
+  TEST_ASSERT_FALSE(parseColorFromAscii("0", color));
+  TEST_ASSERT_FALSE(parseColorFromAscii("#", color));
+  TEST_ASSERT_FALSE(parseColorFromAscii("x", color));
+}
+
 void setup()
 {
   UNITY_BEGIN();
@@ -401,6 +454,10 @@ void setup()
   RUN_TEST(test_parse_payload_ascii_hex_prefix);
   RUN_TEST(test_parse_payload_invalid_length);
   RUN_TEST(test_rejects_invalid_inputs);
+  RUN_TEST(test_invalid_hex_digit_at_each_position_preserves_color);
+  RUN_TEST(test_ascii_uppercase_prefix_and_semicolon_components);
+  RUN_TEST(test_empty_or_missing_payload_preserves_outputs);
+  RUN_TEST(test_single_character_ascii_input_is_rejected);
   UNITY_END();
 }
 

@@ -167,6 +167,23 @@ void test_boosted_face_brightness_is_applied_once_in_software(void)
   }
 }
 
+
+void test_normalization_rejects_nonpositive_reference_and_clamps_speech(void)
+{
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, micNormalizeSpeechLevel(200.0f, 0.0f));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, micNormalizeSpeechLevel(200.0f, -1.0f));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, micNormalizeSpeechLevel(-100.0f, 4000.0f));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, micNormalizeSpeechLevel(0.0f, 4000.0f));
+  TEST_ASSERT_EQUAL_FLOAT(1.0f, micNormalizeSpeechLevel(4000.0f, 4000.0f));
+}
+
+void test_ema_clamps_alpha_to_prevent_overshoot(void)
+{
+  TEST_ASSERT_EQUAL_FLOAT(10.0f, micApplyEma(10.0f, 20.0f, -0.5f));
+  TEST_ASSERT_EQUAL_FLOAT(20.0f, micApplyEma(10.0f, 20.0f, 1.5f));
+  TEST_ASSERT_EQUAL_FLOAT(10.0f, micApplyAttackReleaseEma(10.0f, 10.0f, 0.5f, 0.2f));
+}
+
 void setup()
 {
   UNITY_BEGIN();
@@ -184,6 +201,8 @@ void setup()
   RUN_TEST(test_mouth_override_fixed_scale_preserves_floor_and_true_maximum);
   RUN_TEST(test_normal_face_brightness_is_applied_only_by_panel);
   RUN_TEST(test_boosted_face_brightness_is_applied_once_in_software);
+  RUN_TEST(test_normalization_rejects_nonpositive_reference_and_clamps_speech);
+  RUN_TEST(test_ema_clamps_alpha_to_prevent_overshoot);
   UNITY_END();
 }
 
