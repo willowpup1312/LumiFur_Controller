@@ -13,7 +13,7 @@
 #define DEBUG_BRIGHTNESS 0    // Opt in to brightness logs; serial output can stall animation.
 #endif
 #ifndef DEBUG_VIEWS
-#define DEBUG_VIEWS 1         // Set to 1 to enable views debug outputs
+#define DEBUG_VIEWS 0         // Set to 1 to enable views debug outputs
 #endif
 #ifndef DEBUG_VIEW_TIMING
 #define DEBUG_VIEW_TIMING 0   // Set to 1 to enable view timing debug outputs
@@ -38,6 +38,9 @@
 #endif
 #ifndef DEBUG_DISABLE_BLE_STATUS_ICON
 #define DEBUG_DISABLE_BLE_STATUS_ICON 0 // Set to 1 to hide the on-screen BLE status icon
+#endif
+#ifndef DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE
+#define DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE 0 // Set to 1 to enable brightness boost for Waveshare displays. This mayy introduce some flicker wth sme faces, particularly video player. 
 #endif
 
 #if DEBUG_MODE

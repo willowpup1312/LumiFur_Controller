@@ -4222,7 +4222,7 @@ void setup()
   // Redefine pins if required
   // HUB75_I2S_CFG::i2s_pins _pins={R1, G1, BL1, R2, G2, BL2, CH_A, CH_B, CH_C, CH_D, CH_E, LAT, OE, CLK};
   // HUB75_I2S_CFG mxconfig(PANEL_WIDTH, PANEL_HEIGHT, PANELS_NUMBER);
-  HUB75_I2S_CFG::i2s_pins _pins = {R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
+    HUB75_I2S_CFG::i2s_pins _pins = {R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
 
   // Module configuration
   HUB75_I2S_CFG mxconfig(
@@ -4233,9 +4233,17 @@ void setup()
   );
 
   mxconfig.gpio.e = PIN_E;
-  mxconfig.driver = HUB75_I2S_CFG::FM6126A; // for panels using FM6126A chips
-  mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_16M;                // 20 MHz proved unstable on this panel; keep the highest stable clock.
+
+  mxconfig.driver = HUB75_I2S_CFG::FM6126A; // Default for panels using FM6126A chips
+  
+  #ifdef DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE //Refresh rate and cloock speed adjsutment to boost brightness and minimize flickering while dong so
+  mxconfig.min_refresh_rate = 40; //Lower refresh rate=brighter but more flicker, this is the brightest point without flicker becoming intolerable
+  mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_20M;  //Rasied clock spee to contereact refresh flicker. 20MHz showed to be as stable as 16MHz with the reduce refresh rate in hardware testing.
+  #else
   mxconfig.min_refresh_rate = LF_HUB75_MIN_REFRESH_RATE_HZ; // Favor refresh stability over extra effective color depth.
+  mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_16M;  // 20 MHz proved unstable on this panel; keep the highest stable clock.
+  #endif
+
   mxconfig.latch_blanking = LF_HUB75_LATCH_BLANKING;        // Keep blanking explicit to avoid per-panel surprises.
   mxconfig.clkphase = LF_HUB75_CLKPHASE;                    // false selects the library's negative-edge clocking mode.
   mxconfig.double_buff = true;
