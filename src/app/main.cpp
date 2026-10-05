@@ -593,6 +593,16 @@ void updateGlobalBrightnessScale(uint8_t brightness)
   gRequestedPanelBrightness = brightness;
   globalBrightnessScale = brightness / 255.0f;
   globalBrightnessScaleFixed = static_cast<uint16_t>((static_cast<uint32_t>(brightness) * 256u + 127u) / 255u);
+    // Byte 8 software gain. Clock/refresh are applied on the reboot below.
+  if (waveshareBrightnessBoost && globalBrightnessScaleFixed < 256)
+  {
+    uint16_t boosted = globalBrightnessScaleFixed + (globalBrightnessScaleFixed >> 2);
+    if (boosted > 256)
+    {
+      boosted = 256;
+    }
+    globalBrightnessScaleFixed = boosted;
+  }
   const uint8_t hardwareBrightness = micResolvePanelBrightness(
       brightness,
       gMouthMicBrightnessOverrideActive);
@@ -1483,6 +1493,21 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
     mouthMicBrightnessOverrideEnabled = (item.data[5] != 0);
   }
 
+  const bool oldWaveshareBoost = waveshareBrightnessBoost;
+
+  // Bytes 6–8. A 6-byte write does not change these.
+  if (item.length >= 7)
+  {
+    disableBleIndicatorLight = (item.data[6] != 0);
+  }
+  if (item.length >= 8)
+  {
+    disableBleStatusIcon = (item.data[7] != 0);
+  }
+  if (item.length >= 9)
+  {
+    waveshareBrightnessBoost = (item.data[8] != 0);
+  }
   if (staticColorModeEnabled)
   {
     auroraModeEnabled = false;
@@ -1494,6 +1519,9 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
   setAuroraMode(auroraModeEnabled);
   setStaticColorMode(staticColorModeEnabled);
   setMouthMicBrightnessOverride(mouthMicBrightnessOverrideEnabled);
+  setDisableBleIndicatorLight(disableBleIndicatorLight);
+  setDisableBleStatusIcon(disableBleStatusIcon);
+  setWaveshareBrightnessBoost(waveshareBrightnessBoost);
 
 #if defined(DEBUG_BLE)
   Serial.print("  Auto Brightness: ");
@@ -1512,13 +1540,16 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
 
   if (item.characteristic != nullptr)
   {
-    const uint8_t canonicalConfig[6] = {
-        static_cast<uint8_t>(autoBrightnessEnabled ? 1 : 0),
-        static_cast<uint8_t>(accelerometerEnabled ? 1 : 0),
-        static_cast<uint8_t>(sleepModeEnabled ? 1 : 0),
-        static_cast<uint8_t>(auroraModeEnabled ? 1 : 0),
-        static_cast<uint8_t>(staticColorModeEnabled ? 1 : 0),
-        static_cast<uint8_t>(mouthMicBrightnessOverrideEnabled ? 1 : 0)};
+        const uint8_t canonicalConfig[9] = {
+        static_cast<uint8_t>(autoBrightnessEnabled ? 1 : 0),             // 0
+        static_cast<uint8_t>(accelerometerEnabled ? 1 : 0),              // 1
+        static_cast<uint8_t>(sleepModeEnabled ? 1 : 0),                  // 2
+        static_cast<uint8_t>(auroraModeEnabled ? 1 : 0),                 // 3
+        static_cast<uint8_t>(staticColorModeEnabled ? 1 : 0),            // 4
+        static_cast<uint8_t>(mouthMicBrightnessOverrideEnabled ? 1 : 0), // 5
+        static_cast<uint8_t>(disableBleIndicatorLight ? 1 : 0),          // 6 NeoPixel off
+        static_cast<uint8_t>(disableBleStatusIcon ? 1 : 0),              // 7 panel icon off
+        static_cast<uint8_t>(waveshareBrightnessBoost ? 1 : 0)};         // 8 Waveshare boost
     item.characteristic->setValue(canonicalConfig, sizeof(canonicalConfig));
   }
 
@@ -1547,10 +1578,32 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
     facePlasmaDirty = true;
     requestDisplayRefresh();
   }
-  if (oldMouthMicBrightnessOverride != mouthMicBrightnessOverrideEnabled)
+    if (oldMouthMicBrightnessOverride != mouthMicBrightnessOverrideEnabled)
   {
     requestDisplayRefresh();
     notifyBleTask();
+  }
+
+  // Byte 8 changed. setup() rebuilds mxconfig only on boot.
+  if (oldWaveshareBoost != waveshareBrightnessBoost)
+  {
+    delay(100); // let the 9-byte notify flush
+    ESP.restart();
+  }
+}
+
+// One byte, 0–255. Higher value raises the auto-brightness floor.
+static void handleBleAutoBrightnessFloorWriteWork(const BleWorkItem &item)
+{
+  if (item.length < 1)
+  {
+    return;
+  }
+  autoBrightnessFloor = item.data[0];
+  setAutoBrightnessFloor(autoBrightnessFloor);
+  if (item.characteristic != nullptr)
+  {
+    item.characteristic->setValue(&autoBrightnessFloor, 1);
   }
 }
 
@@ -1566,6 +1619,21 @@ static void handleBleBrightnessWriteWork(const BleWorkItem &item)
 #if DEBUG_BRIGHTNESS
   Serial.printf("Brightness target set to %u\n", userBrightness);
 #endif
+}
+
+// One byte, 0–255. Higher value raises the auto-brightness floor.
+static void handleBleAutoBrightnessFloorWriteWork(const BleWorkItem &item)
+{
+  if (item.length < 1)
+  {
+    return;
+  }
+  autoBrightnessFloor = item.data[0];
+  setAutoBrightnessFloor(autoBrightnessFloor);
+  if (item.characteristic != nullptr)
+  {
+    item.characteristic->setValue(&autoBrightnessFloor, 1);
+  }
 }
 
 static void handleBleStaticColorWriteWork(const BleWorkItem &item)
@@ -1666,6 +1734,9 @@ static void bleWorkerTask(void *param)
     case BleWorkType::BrightnessWrite:
       handleBleBrightnessWriteWork(item);
       break;
+    case BleWorkType::AutoBrightnessFloorWrite:
+      handleBleAutoBrightnessFloorWriteWork(item);
+      break;
     case BleWorkType::StaticColorWrite:
       handleBleStaticColorWriteWork(item);
       break;
@@ -1730,11 +1801,13 @@ void handleBLEStatusLED()
     lastPasskeyValid = pairingSnapshot.passkeyValid;
     lastPasskey = pairingSnapshot.passkey;
   }
-#if DEBUG_DISABLE_BLE_INDICATOR_LIGHT
-  statusPixel.setPixelColor(0, 0, 0, 0);
-  statusPixel.show();
-  return;
-#endif
+  // Byte 6. Off skips pairing and advert blinks.
+if (disableBleIndicatorLight)
+  {
+    statusPixel.setPixelColor(0, 0, 0, 0);
+    statusPixel.show();
+    return;
+  }
   if (pairingSnapshot.pairing)
   {
     fadeInAndOutLED(128, 0, 128); // Purple fade when pairing
@@ -1942,10 +2015,8 @@ static uint8_t scaleColorComponent(uint8_t value, float intensity)
 
 void drawBluetoothStatusIcon()
 {
-#if DEBUG_DISABLE_BLE_STATUS_ICON
-  return;
-#endif
-  if (!dma_display)
+  // Byte 7. Do not draw the on-panel BLE rune.
+if (disableBleStatusIcon)
   {
     return;
   }
@@ -3895,10 +3966,14 @@ void setup()
   }
 
   initPreferences(); // Initialize Preferences
+  autoBrightnessFloor = getAutoBrightnessFloor();
   userBrightness = static_cast<uint8_t>(constrain(getUserBrightness(), 0, 255));
   sliderBrightness = map(userBrightness, 1, 255, 1, 100);
   autoBrightnessEnabled = getAutoBrightness();
   mouthMicBrightnessOverrideEnabled = getMouthMicBrightnessOverride();
+  disableBleIndicatorLight = getDisableBleIndicatorLight();
+  disableBleStatusIcon = getDisableBleStatusIcon();
+  waveshareBrightnessBoost = getWaveshareBrightnessBoost(); // Must run before mxconfig is built. Reboot reapplies clock/refresh from this flag.
   syncBrightnessState(userBrightness);
   accelerometerEnabled = getAccelerometerEnabled();
   sleepModeEnabled = getSleepMode();
@@ -4114,6 +4189,11 @@ void setup()
   pBrightnessCharacteristic->setCallbacks(&brightnessCallbacks);
   // initialize with current brightness
 
+  pAutoBrightnessFloorCharacteristic = pService->createCharacteristic(
+      "BEB5483E-36E1-4688-B7F5-EA07361B26A9",
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  pAutoBrightnessFloorCharacteristic->setCallbacks(&autoBrightnessFloorCallbacks);
+
   pOtaCharacteristic = pService->createCharacteristic(
       OTA_CHARACTERISTIC_UUID,
       NIMBLE_PROPERTY::READ |
@@ -4127,6 +4207,7 @@ void setup()
       20);
   otaDesc->setValue("OTA Control");
   pBrightnessCharacteristic->setValue(&userBrightness, 1);
+  pAutoBrightnessFloorCharacteristic->setValue(&autoBrightnessFloor, 1);
 
   setupAdaptiveBrightness();
 
@@ -4240,13 +4321,18 @@ void setup()
 
   mxconfig.driver = HUB75_I2S_CFG::FM6126A; // Default for panels using FM6126A chips
   
-  #ifdef DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE //Refresh rate and cloock speed adjsutment to boost brightness and minimize flickering while dong so
-  mxconfig.min_refresh_rate = 40; //Lower refresh rate=brighter but more flicker, this is the brightest point without flicker becoming intolerable
-  mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_20M;  //Rasied clock spee to contereact refresh flicker. 20MHz showed to be as stable as 16MHz with the reduce refresh rate in hardware testing.
-  #else
-  mxconfig.min_refresh_rate = LF_HUB75_MIN_REFRESH_RATE_HZ; // Favor refresh stability over extra effective color depth.
-  mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_16M;  // 20 MHz proved unstable on this panel; keep the highest stable clock.
-  #endif
+  // DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE, now the saved BLE value.
+  // 40 Hz / 20 MHz is the bright path. Otherwise keep the stable clock.
+  if (waveshareBrightnessBoost)
+  {
+    mxconfig.min_refresh_rate = 40;
+    mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_20M;
+  }
+  else
+  {
+    mxconfig.min_refresh_rate = LF_HUB75_MIN_REFRESH_RATE_HZ;
+    mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_16M;
+  }
 
   mxconfig.latch_blanking = LF_HUB75_LATCH_BLANKING;        // Keep blanking explicit to avoid per-panel surprises.
   mxconfig.clkphase = LF_HUB75_CLKPHASE;                    // false selects the library's negative-edge clocking mode.

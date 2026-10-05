@@ -1,5 +1,6 @@
 #pragma once
 #include <Preferences.h>
+#include "config/debug_config.h"
 
 static constexpr char NAMESPACE[] = "LumiFur";
 static constexpr char KEY_LAST[] = "lastView";
@@ -176,6 +177,48 @@ inline void saveSelectedColor(const String &text)
 inline String getSelectedColor()
 {
   return getPrefs().getString("selectedColor", "");
+}
+
+// Unwritten NVS keys return the compile-time flag, so first boot matches the old #define.
+
+// DEBUG_DISABLE_BLE_INDICATOR_LIGHT
+inline bool getDisableBleIndicatorLight()
+{
+  return getPrefs().getBool("bleindoff", DEBUG_DISABLE_BLE_INDICATOR_LIGHT);
+}
+inline void setDisableBleIndicatorLight(bool v)
+{
+  getPrefs().putBool("bleindoff", v);
+}
+
+// DEBUG_DISABLE_BLE_STATUS_ICON
+inline bool getDisableBleStatusIcon()
+{
+  return getPrefs().getBool("blestatusoff", DEBUG_DISABLE_BLE_STATUS_ICON);
+}
+inline void setDisableBleStatusIcon(bool v)
+{
+  getPrefs().putBool("blestatusoff", v);
+}
+
+// DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE
+inline bool getWaveshareBrightnessBoost()
+{
+  return getPrefs().getBool("wsbrightboost", DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE);
+}
+inline void setWaveshareBrightnessBoost(bool v)
+{
+  getPrefs().putBool("wsbrightboost", v);
+}
+
+// Auto-brightness floor, 0–255. 15 matches the old hardcoded minimum.
+inline uint8_t getAutoBrightnessFloor()
+{
+  return getPrefs().getUChar("autobrightfloor", 15);
+}
+inline void setAutoBrightnessFloor(uint8_t floor)
+{
+  getPrefs().putUChar("autobrightfloor", floor);
 }
 
 // Clear all preferences - Implement feature to reset controller to default settings
