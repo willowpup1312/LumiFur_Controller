@@ -859,7 +859,11 @@ const unsigned long fadeInDuration = 2000; // Duration for fade-in (2 seconds)
 const unsigned long fullDuration = 6000;   // Full brightness time after fade-in (6 seconds)
 // Total time from trigger to start fade-out is fadeInDuration + fullDuration = 8 seconds.
 const unsigned long fadeOutDuration = 2000; // Duration for fade-out (2 seconds)
-
+static unsigned long boopHits[16] = {};
+static uint8_t boopHitCount = 0;
+static uint8_t boopSavedView = 0;
+static unsigned long boopRevertAt = 0;
+static bool boopLoadingActive = false;
 // Non-blocking sensor read interval
 unsigned long lastSensorReadTime = 0;
 const unsigned long sensorInterval = 250; // sensor read throttled to reduce I2C pressure
@@ -1533,6 +1537,15 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
     matrixRainInsteadOfPlasma = (item.data[9] != 0);
   }
   setMatrixRainInsteadOfPlasma(matrixRainInsteadOfPlasma);
+  if (item.length >= 11)
+  {
+    boopMode = item.data[10];
+    if (boopMode > 3)
+    {
+      boopMode = 0;
+    }
+  }
+  setBoopMode(boopMode);
   if (staticColorModeEnabled)
   {
     auroraModeEnabled = false;
@@ -1569,21 +1582,25 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
   Serial.println(waveshareBrightnessBoost ? "Enabled" : "Disabled");
   Serial.print("  Matrix fill:     ");
   Serial.println(matrixRainInsteadOfPlasma ? "Matrix rain" : "Plasma");
+  Serial.print("  Boop mode:       ");
+  Serial.println(boopMode);
 #endif
 
   if (item.characteristic != nullptr)
   {
-        const uint8_t canonicalConfig[9] = {
-        static_cast<uint8_t>(autoBrightnessEnabled ? 1 : 0),             // 0
-        static_cast<uint8_t>(accelerometerEnabled ? 1 : 0),              // 1
-        static_cast<uint8_t>(sleepModeEnabled ? 1 : 0),                  // 2
-        static_cast<uint8_t>(auroraModeEnabled ? 1 : 0),                 // 3
-        static_cast<uint8_t>(staticColorModeEnabled ? 1 : 0),            // 4
-        static_cast<uint8_t>(mouthMicBrightnessOverrideEnabled ? 1 : 0), // 5
-        static_cast<uint8_t>(disableBleIndicatorLight ? 1 : 0),          // 6 NeoPixel off
-        static_cast<uint8_t>(disableBleStatusIcon ? 1 : 0),              // 7 panel icon off
-        static_cast<uint8_t>(waveshareBrightnessBoost ? 1 : 0)};         // 8 Waveshare boost
-        static_cast<uint8_t>(matrixRainInsteadOfPlasma ? 1 : 0); // 9 matrix rain instead of plasma
+           const uint8_t canonicalConfig[11] = {
+        static_cast<uint8_t>(autoBrightnessEnabled ? 1 : 0),
+        static_cast<uint8_t>(accelerometerEnabled ? 1 : 0),
+        static_cast<uint8_t>(sleepModeEnabled ? 1 : 0),
+        static_cast<uint8_t>(auroraModeEnabled ? 1 : 0),
+        static_cast<uint8_t>(staticColorModeEnabled ? 1 : 0),
+        static_cast<uint8_t>(mouthMicBrightnessOverrideEnabled ? 1 : 0),
+        static_cast<uint8_t>(disableBleIndicatorLight ? 1 : 0),
+        static_cast<uint8_t>(disableBleStatusIcon ? 1 : 0),
+        static_cast<uint8_t>(waveshareBrightnessBoost ? 1 : 0),
+        static_cast<uint8_t>(matrixRainInsteadOfPlasma ? 1 : 0),
+        static_cast<uint8_t>(boopMode)};
+    item.characteristic->setValue(canonicalConfig, sizeof(canonicalConfig));                                 // 10 boop mode                                                      // 10
     item.characteristic->setValue(canonicalConfig, sizeof(canonicalConfig));
   }
 
@@ -4046,6 +4063,7 @@ void setup()
   sleepModeEnabled = getSleepMode();
   auroraModeEnabled = getAuroraMode();
   matrixRainInsteadOfPlasma = getMatrixRainInsteadOfPlasma();
+  boopMode = getBoopMode();
   staticColorModeEnabled = getStaticColorMode();
   if (staticColorModeEnabled)
   {
@@ -5110,7 +5128,6 @@ void displayCurrentView(int view)
     return;
   }
 
-
   const PairingSnapshot pairingSnapshot = getPairingSnapshot();
   if (pairingSnapshot.pairing && pairingSnapshot.passkeyValid)
   {
@@ -5419,6 +5436,77 @@ void checkSleepMode()
     }
   }
 }
+
+// Count a proximity boop. Higher thresholds win on the same hit.
+    static void handleBoop(unsigned long now)
+    {
+      uint8_t kept = 0;
+      for (uint8_t i = 0; i < boopHitCount; ++i)
+      {
+        if (now - boopHits[i] <= 15000UL)
+        {
+          boopHits[kept++] = boopHits[i];
+        }
+      }
+      boopHitCount = kept;
+      if (boopHitCount < 16)
+      {
+        boopHits[boopHitCount++] = now;
+      }
+
+      uint8_t hits10s = 0;
+      uint8_t hits15s = 0;
+      for (uint8_t i = 0; i < boopHitCount; ++i)
+      {
+        if (now - boopHits[i] <= 10000UL)
+        {
+          ++hits10s;
+        }
+        if (now - boopHits[i] <= 15000UL)
+        {
+          ++hits15s;
+        }
+      }
+
+      const unsigned long blushSpan = fadeInDuration + fullDuration + fadeOutDuration;
+      int specialView = -1;
+      if (boopMode >= 3 && hits15s >= 15)
+      {
+        specialView = -2; // loading bar, not a view
+      }
+      else if (boopMode >= 2 && hits15s >= 10)
+      {
+        specialView = VIEW_ANGRY_FACE;
+      }
+      else if (boopMode >= 1 && hits10s >= 5)
+      {
+        specialView = VIEW_SPIRAL_EYES;
+      }
+
+      if (specialView == -2)
+      {
+        boopSavedView = currentView;
+        boopLoadingActive = true;
+        boopRevertAt = now + 3000UL;
+        loadingProgress = 0;
+        return;
+      }
+      if (specialView >= 0)
+      {
+        boopSavedView = currentView;
+        currentView = static_cast<uint8_t>(specialView);
+        boopRevertAt = now + blushSpan;
+        boopLoadingActive = false;
+        notifyBleTask();
+        requestDisplayRefresh();
+        return;
+      }
+
+      blushState = BlushState::FadeIn;
+      blushStateStartTime = now;
+      originalViewBeforeBlush = currentView;
+      wasBlushOverlay = true;
+    }
 
 void loop()
 {
@@ -5784,6 +5872,7 @@ void loop()
                      }
                    }
 
+                   
                    if (blushState == BlushState::Inactive && !bounceJustTriggered)
                    {
                      // Trigger blush if:
@@ -5800,6 +5889,7 @@ void loop()
 #endif
                        blushState = BlushState::FadeIn;
                        blushStateStartTime = sensorNow;
+                       handleBoop(sensorNow);
                        lastActivityTime = sensorNow;
 
                        // This is a blush overlay on the current stable view
@@ -5821,6 +5911,15 @@ void loop()
       spiralStartMillis = 0;
       requestDisplayRefresh();
       notifyBleTask();
+    }
+
+    if (boopRevertAt != 0 && (long)(loopNow - boopRevertAt) >= 0)
+    {
+      boopRevertAt = 0;
+      boopLoadingActive = false;
+      currentView = boopSavedView;
+      notifyBleTask();
+      requestDisplayRefresh();
     }
 
     // --- Update Adaptive Brightness ---

@@ -229,7 +229,15 @@ inline void setMatrixRainInsteadOfPlasma(bool v)
 {
   getPrefs().putBool("matrixoverplasma", v);
 }
-
+// 0 default, 1 advanced boop 1, 2 advanced boop 2, 3 advanced boop 4.
+inline uint8_t getBoopMode()
+{
+  return getPrefs().getUChar("boopmode", 0);
+}
+inline void setBoopMode(uint8_t mode)
+{
+  getPrefs().putUChar("boopmode", mode);
+}
 // Clear all preferences - Implement feature to reset controller to default settings
 inline void clearPreferences()
 {

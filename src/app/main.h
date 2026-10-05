@@ -95,6 +95,8 @@ bool configApplyConstantColor = false; // Variable to track constant color appli
 // Config byte 9. When true, face plasma masks render matrix rain instead of aurora.
 bool matrixRainInsteadOfPlasma = false;
 uint8_t autoBrightnessFloor = 15;
+// Config byte 10. 0 default, 1 advanced 1, 2 advanced 2, 3 advanced 4.
+uint8_t boopMode = 0;
 
 /*------------------------------------------------------------------------------
   OTA instances & variables
