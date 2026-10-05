@@ -91,6 +91,8 @@ bool configApplyAuroraMode = false;
 bool configApplyAccelerometer = true;
 bool configApplyConstantColor = false; // Variable to track constant color application
 // BLE slider. Raises the auto-brightness minimum. 15 is the old floor.
+// Config byte 9. When true, face plasma masks render matrix rain instead of aurora.
+bool matrixRainInsteadOfPlasma = false;
 uint8_t autoBrightnessFloor = 15;
 
 /*------------------------------------------------------------------------------

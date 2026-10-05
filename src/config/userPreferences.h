@@ -220,6 +220,15 @@ inline void setAutoBrightnessFloor(uint8_t floor)
 {
   getPrefs().putUChar("autobrightfloor", floor);
 }
+// Global face fill. False keeps plasma. True stamps matrix rain into the same masks.
+inline bool getMatrixRainInsteadOfPlasma()
+{
+  return getPrefs().getBool("matrixoverplasma", false);
+}
+inline void setMatrixRainInsteadOfPlasma(bool v)
+{
+  getPrefs().putBool("matrixoverplasma", v);
+}
 
 // Clear all preferences - Implement feature to reset controller to default settings
 inline void clearPreferences()

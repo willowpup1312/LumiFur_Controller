@@ -1527,6 +1527,12 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
   {
     waveshareBrightnessBoost = (item.data[8] != 0);
   }
+    // Byte 9. A short packet leaves the saved value alone.
+  if (item.length >= 10)
+  {
+    matrixRainInsteadOfPlasma = (item.data[9] != 0);
+  }
+  setMatrixRainInsteadOfPlasma(matrixRainInsteadOfPlasma);
   if (staticColorModeEnabled)
   {
     auroraModeEnabled = false;
@@ -1569,6 +1575,7 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
         static_cast<uint8_t>(disableBleIndicatorLight ? 1 : 0),          // 6 NeoPixel off
         static_cast<uint8_t>(disableBleStatusIcon ? 1 : 0),              // 7 panel icon off
         static_cast<uint8_t>(waveshareBrightnessBoost ? 1 : 0)};         // 8 Waveshare boost
+        static_cast<uint8_t>(matrixRainInsteadOfPlasma ? 1 : 0); // 9 matrix rain instead of plasma
     item.characteristic->setValue(canonicalConfig, sizeof(canonicalConfig));
   }
 
@@ -2311,6 +2318,15 @@ void drawPlasmaXbm(int x, int y, int width, int height, const uint8_t *xbm,
                    uint8_t time_offset = 0, float scale = 5.0f, float animSpeed = 0.2f,
                    uint8_t brightnessScale = 255, bool bypassGlobalBrightness = false)
 {
+  
+  // Global toggle: same mask, matrix rain instead of the plasma fill.
+  if (matrixRainInsteadOfPlasma)
+  {
+    matrixRainAdvance();
+    drawMatrixRainThroughXbm(x, y, width, height, xbm);
+    return;
+  }
+
   const int byteWidth = (width + 7) >> 3;
   if (byteWidth <= 0)
   {
@@ -3982,6 +3998,7 @@ void setup()
   accelerometerEnabled = getAccelerometerEnabled();
   sleepModeEnabled = getSleepMode();
   auroraModeEnabled = getAuroraMode();
+  matrixRainInsteadOfPlasma = getMatrixRainInsteadOfPlasma();
   staticColorModeEnabled = getStaticColorMode();
   if (staticColorModeEnabled)
   {
