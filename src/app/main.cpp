@@ -1561,6 +1561,14 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
   Serial.println(staticColorModeEnabled ? "Enabled" : "Disabled");
   Serial.print("  Mouth Mic Max:   ");
   Serial.println(mouthMicBrightnessOverrideEnabled ? "Enabled" : "Disabled");
+  Serial.print("  BLE indicator:   ");
+  Serial.println(disableBleIndicatorLight ? "Disabled" : "Enabled");
+  Serial.print("  BLE status icon: ");
+  Serial.println(disableBleStatusIcon ? "Hidden" : "Shown");
+  Serial.print("  Waveshare boost: ");
+  Serial.println(waveshareBrightnessBoost ? "Enabled" : "Disabled");
+  Serial.print("  Matrix fill:     ");
+  Serial.println(matrixRainInsteadOfPlasma ? "Matrix rain" : "Plasma");
 #endif
 
   if (item.characteristic != nullptr)
@@ -1627,6 +1635,7 @@ static void handleBleAutoBrightnessFloorWriteWork(const BleWorkItem &item)
   }
   autoBrightnessFloor = item.data[0];
   setAutoBrightnessFloor(autoBrightnessFloor);
+  Serial.printf("Auto brightness floor set to %u\n", autoBrightnessFloor);
   if (item.characteristic != nullptr)
   {
     item.characteristic->setValue(&autoBrightnessFloor, 1);
@@ -2318,7 +2327,7 @@ void drawPlasmaXbm(int x, int y, int width, int height, const uint8_t *xbm,
                    uint8_t time_offset = 0, float scale = 5.0f, float animSpeed = 0.2f,
                    uint8_t brightnessScale = 255, bool bypassGlobalBrightness = false)
 {
-  
+
   // Global toggle: same mask, matrix rain instead of the plasma fill.
   if (matrixRainInsteadOfPlasma)
   {
@@ -2542,6 +2551,13 @@ void drawBitmapAdvanced(int x, int y, int width, int height, const uint8_t *bitm
                         uint16_t color, int progress, bool usePlasma,
                         uint8_t time_offset = 0, float scale = 5.0, float animSpeed = 0.2f)
 {
+  // Byte 9. Eyes use this path, not drawPlasmaXbm.
+  if (matrixRainInsteadOfPlasma && usePlasma && bitmap != nullptr)
+  {
+    matrixRainAdvance();
+    drawMatrixRainThroughXbm(x, y, width, height, bitmap);
+    return;
+  }
   const int byteWidth = (width + 7) / 8;
   const float center_y = (height - 1) / 2.0f;
 
@@ -3117,6 +3133,37 @@ void blinkingEyes()
   case VIEW_SLANT_EYES: // Slant eyes (This is also the default)
     // Values are already set by default
     break;
+    case VIEW_ANGRY_FACE:
+  {
+    // Narrowed slant eyes, pulled down toward the nose.
+    rightEyeBitmap = (const uint8_t *)slanteyes;
+    leftEyeBitmap = (const uint8_t *)slanteyes;
+    eyeWidth = 32;
+    eyeHeight = 16;
+    rightEyeX = 2;
+    rightEyeY = 6;
+    leftEyeX = 94;
+    leftEyeY = 6;
+
+    drawBitmapAdvanced(rightEyeX + final_x_offset, rightEyeY + final_y_offset,
+                       eyeWidth, eyeHeight, rightEyeBitmap, solidColor,
+                       blinkProgress, usePlasma, 0);
+    drawBitmapAdvanced(leftEyeX + final_x_offset, leftEyeY + final_y_offset,
+                       eyeWidth, eyeHeight, leftEyeBitmap, solidColor,
+                       blinkProgress, usePlasma, 128);
+
+    // Brows peak at the nose and drop toward the temples.
+    const uint16_t brow = dma_display->color565(255, 40, 0);
+    dma_display->drawLine(4, 2, 30, 7, brow);
+    dma_display->drawLine(4, 3, 30, 8, brow);
+    dma_display->drawLine(124, 2, 98, 7, brow);
+    dma_display->drawLine(124, 3, 98, 8, brow);
+
+    // Short snarl under the nose. Plasma toggle still fills the eyes.
+    dma_display->drawLine(52, 20, 64, 24, brow);
+    dma_display->drawLine(76, 20, 64, 24, brow);
+    return;
+  }
   case VIEW_SPIRAL_EYES: // Spiral eyes
     return;              // Spiral view handles its own drawing, so we exit here.
   case VIEW_CIRCLE_EYES: // Circle eyes
@@ -5026,6 +5073,7 @@ static const ViewRenderFunc VIEW_RENDERERS[TOTAL_VIEWS] = {
     renderVideoPlayerView,         // VIEW_VIDEO_PLAYER
     renderMatrixRainView,          // VIEW_MATRIX_RAIN
     renderMatrixFaceView,          // VIEW_MATRIX_FACE
+    renderFaceWithPlasma,          // VIEW_ANGRY_FACE
 };
 
 static_assert(sizeof(VIEW_RENDERERS) / sizeof(ViewRenderFunc) == TOTAL_VIEWS, "View renderer table mismatch");

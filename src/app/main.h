@@ -64,6 +64,7 @@ enum View
   VIEW_VIDEO_PLAYER,
   VIEW_MATRIX_RAIN,
   VIEW_MATRIX_FACE,
+  VIEW_ANGRY_FACE, // furrowed brows, narrowed eyes
   //VIEW_LGBT_FLAG
 
   TOTAL_VIEWS // Special entry will automatically hold the total number of views.
