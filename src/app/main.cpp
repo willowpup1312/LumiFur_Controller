@@ -1333,23 +1333,7 @@ class BrightnessCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 static BrightnessCallbacks brightnessCallbacks;
-class AutoBrightnessFloorCallbacks : public NimBLECharacteristicCallbacks
-{
-  void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override
-  {
-    (void)connInfo;
-    NimBLEAttValue val = pChr->getValue();
-    if (val.size() < 1)
-    {
-      return;
-    }
-    if (!bleQueueByte(BleWorkType::AutoBrightnessFloorWrite, pChr, static_cast<uint8_t>(val[0])))
-    {
-      Serial.println("BLE floor queue full, dropping floor update.");
-    }
-  }
-};
-static AutoBrightnessFloorCallbacks autoBrightnessFloorCallbacks;
+
 
 class StaticColorCallbacks : public NimBLECharacteristicCallbacks
 {
@@ -1377,6 +1361,24 @@ class StaticColorCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 static StaticColorCallbacks staticColorCallbacks;
+
+class AutoBrightnessFloorCallbacks : public NimBLECharacteristicCallbacks
+{
+  void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    NimBLEAttValue val = pChr->getValue();
+    if (val.size() < 1)
+    {
+      return;
+    }
+    if (!bleQueueByte(BleWorkType::AutoBrightnessFloorWrite, pChr, static_cast<uint8_t>(val[0])))
+    {
+      Serial.println("BLE floor queue full, dropping floor update.");
+    }
+  }
+};
+static AutoBrightnessFloorCallbacks autoBrightnessFloorCallbacks;
 
 static std::string buildStrobeSettingsPayload()
 {
@@ -1636,21 +1638,6 @@ static void handleBleBrightnessWriteWork(const BleWorkItem &item)
 #if DEBUG_BRIGHTNESS
   Serial.printf("Brightness target set to %u\n", userBrightness);
 #endif
-}
-
-// One byte, 0–255. Higher value raises the auto-brightness floor.
-static void handleBleAutoBrightnessFloorWriteWork(const BleWorkItem &item)
-{
-  if (item.length < 1)
-  {
-    return;
-  }
-  autoBrightnessFloor = item.data[0];
-  setAutoBrightnessFloor(autoBrightnessFloor);
-  if (item.characteristic != nullptr)
-  {
-    item.characteristic->setValue(&autoBrightnessFloor, 1);
-  }
 }
 
 static void handleBleStaticColorWriteWork(const BleWorkItem &item)
