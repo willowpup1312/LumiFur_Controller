@@ -1333,6 +1333,23 @@ class BrightnessCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 static BrightnessCallbacks brightnessCallbacks;
+class AutoBrightnessFloorCallbacks : public NimBLECharacteristicCallbacks
+{
+  void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    NimBLEAttValue val = pChr->getValue();
+    if (val.size() < 1)
+    {
+      return;
+    }
+    if (!bleQueueByte(BleWorkType::AutoBrightnessFloorWrite, pChr, static_cast<uint8_t>(val[0])))
+    {
+      Serial.println("BLE floor queue full, dropping floor update.");
+    }
+  }
+};
+static AutoBrightnessFloorCallbacks autoBrightnessFloorCallbacks;
 
 class StaticColorCallbacks : public NimBLECharacteristicCallbacks
 {
@@ -4189,8 +4206,10 @@ void setup()
   pBrightnessCharacteristic->setCallbacks(&brightnessCallbacks);
   // initialize with current brightness
 
+  
+  NimBLECharacteristic *pAutoBrightnessFloorCharacteristic = nullptr;
   pAutoBrightnessFloorCharacteristic = pService->createCharacteristic(
-      "BEB5483E-36E1-4688-B7F5-EA07361B26A9",
+    AUTO_BRIGHTNESS_FLOOR_CHARACTERISTIC_UUID,
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
   pAutoBrightnessFloorCharacteristic->setCallbacks(&autoBrightnessFloorCallbacks);
 
