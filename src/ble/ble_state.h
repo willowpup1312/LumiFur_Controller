@@ -14,6 +14,7 @@ extern bool oldDeviceConnected;
 extern bool devicePairing;
 extern uint32_t pairingPasskey;
 extern bool pairingPasskeyValid;
+extern NimBLECharacteristic *pVideoListCharacteristic;
 
 struct PairingSnapshot
 {
