@@ -1339,6 +1339,57 @@ class BrightnessCallbacks : public NimBLECharacteristicCallbacks
 };
 static BrightnessCallbacks brightnessCallbacks;
 
+class VideoListCallbacks : public NimBLECharacteristicCallbacks
+{
+  void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    if (!videoPlayerInstance) return;
+
+    videoPlayerInstance->scanAvailableVideos();
+
+    uint8_t buf[512] = {};
+    size_t offset = 0;
+    const size_t count = videoPlayerInstance->availableVideoCount();
+    const size_t current = videoPlayerInstance->currentVideoIndex();
+
+    if (offset + 2 > sizeof(buf)) return;
+    buf[offset++] = static_cast<uint8_t>(count);
+    buf[offset++] = static_cast<uint8_t>(current);
+
+    for (size_t i = 0; i < count && offset < sizeof(buf) - 1; ++i)
+    {
+      const char *name = videoPlayerInstance->availableVideoName(i);
+      size_t len = strlen(name);
+      if (offset + len + 1 > sizeof(buf)) break;
+      memcpy(buf + offset, name, len);
+      offset += len;
+      buf[offset++] = '\0';
+    }
+
+    pCharacteristic->setValue(buf, offset);
+  }
+
+  void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    if (!videoPlayerInstance) return;
+    std::string value = pCharacteristic->getValue();
+    if (value.empty()) return;
+
+    uint8_t index = static_cast<uint8_t>(value[0]);
+    if (videoPlayerInstance->selectVideoByIndex(index))
+    {
+      uint8_t notify[2] = {
+          static_cast<uint8_t>(videoPlayerInstance->availableVideoCount()),
+          static_cast<uint8_t>(videoPlayerInstance->currentVideoIndex())
+      };
+      pCharacteristic->setValue(notify, 2);
+      pCharacteristic->notify();
+    }
+  }
+};
+static VideoListCallbacks videoListCallbacks;
 
 class StaticColorCallbacks : public NimBLECharacteristicCallbacks
 {
@@ -4422,6 +4473,25 @@ void setup()
   strobeSettingsDesc->setValue("Strobe Settings");
   Serial.println("Strobe Settings Characteristic created");
 
+Serial.println("Strobe Settings Characteristic created");
+
+  // Video list characteristic
+  pVideoListCharacteristic = pService->createCharacteristic(
+      VIDEO_LIST_CHARACTERISTIC_UUID,
+      NIMBLE_PROPERTY::READ |
+      NIMBLE_PROPERTY::WRITE |
+      NIMBLE_PROPERTY::WRITE_ENC |
+      NIMBLE_PROPERTY::NOTIFY
+  );
+  pVideoListCharacteristic->setCallbacks(&videoListCallbacks);
+
+  NimBLEDescriptor *videoListDesc = pVideoListCharacteristic->createDescriptor(
+      "2901",
+      NIMBLE_PROPERTY::READ,
+      20);
+  videoListDesc->setValue("Video List");
+  Serial.println("Video List Characteristic created");
+
   // nimBLEService* pBaadService = pServer->createService("BAAD");
   // Services are started when the GATT server starts during advertising.
 
@@ -4537,7 +4607,10 @@ void setup()
   {
     Serial.println("Video player created; waiting for FFat storage to become available.");
   }
-
+  if (videoPlayerInstance && gVideoStorageReady)
+  {
+    videoPlayerInstance->scanAvailableVideos();
+  }
   // ... rest of your setup() code ...
   // e.g., currentView = getLastView();
 

@@ -25,6 +25,9 @@ struct MonoVideoDebugInfo
 class MonoVideoPlayer
 {
 public:
+  static constexpr size_t kMaxVideos = 16;
+  static constexpr size_t kMaxNameLen = 32;
+
   MonoVideoPlayer(fs::FS &filesystem, const char *path, uint16_t width, uint16_t height, uint16_t panelWidth = 0, bool debugEnabled = false);
   ~MonoVideoPlayer();
 
@@ -37,6 +40,14 @@ public:
   bool ready() const;
   const char *error() const;
   MonoVideoDebugInfo debugInfo() const;
+
+  // Multi-file support
+  bool scanAvailableVideos();
+  size_t availableVideoCount() const { return videoCount_; }
+  const char *availableVideoName(size_t index) const;
+  bool selectVideoByIndex(size_t index);
+  size_t currentVideoIndex() const { return currentVideoIndex_; }
+  const char *currentVideoName() const;
 
 private:
   bool openVideo();
@@ -77,4 +88,9 @@ private:
   bool lastDecodeReachedEof_ = false;
   char activePath_[96] = "";
   char errorText_[24] = "Video unavailable";
+
+  // Multi-file state
+  char videoNames_[kMaxVideos][kMaxNameLen] = {};
+  size_t videoCount_ = 0;
+  size_t currentVideoIndex_ = 0;
 };
