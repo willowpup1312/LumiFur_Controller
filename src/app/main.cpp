@@ -4868,7 +4868,8 @@ Serial.println("Strobe Settings Characteristic created");
 
   lastActivityTime = millis(); // Initialize the activity timer for sleep mode
 
-  randomSeed(analogRead(0)); // Seed the random number generator
+  randomSeed(esp_random()); // Seed the random number generator
+  //randomSeed(analogRead(0));
 
   // Set sleep timeout based on debug mode
   SLEEP_TIMEOUT_MS = DEBUG_MODE ? SLEEP_TIMEOUT_MS_DEBUG : SLEEP_TIMEOUT_MS_NORMAL;

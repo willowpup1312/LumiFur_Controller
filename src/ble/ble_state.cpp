@@ -50,6 +50,10 @@ NimBLECharacteristic *pStrobeSettingsCharacteristic = nullptr;
 NimBLECharacteristic *pOtaCharacteristic = nullptr;
 NimBLECharacteristic *pInfoCharacteristic = nullptr;
 NimBLECharacteristic *pVideoListCharacteristic = nullptr;
+// Fan / HUD / OLED characteristics
+NimBLECharacteristic *pFanSpeedCharacteristic = nullptr;
+NimBLECharacteristic *pHudEnabledCharacteristic = nullptr;
+NimBLECharacteristic *pOledContrastCharacteristic = nullptr;
 
 std::string fwVersion = FIRMWARE_VERSION;
 std::string deviceModel = DEVICE_MODEL;

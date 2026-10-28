@@ -85,8 +85,9 @@ void drawTvStaticThroughXbm(int x, int y, int width, int height, const uint8_t *
     for (int i = 0; i < width; ++i)
     {
       const int byteIndex = j * byteWidth + (i >> 3);
-      const uint8_t bit = 1u << (i & 7);
-      if (!(xbm[byteIndex] & bit))
+      const uint8_t b = pgm_read_byte(&xbm[byteIndex]);
+      const uint8_t bit = 0x80u >> (i & 7);          // MSB-first, same as every other face path
+      if (!(b & bit))
       {
         continue;
       }
