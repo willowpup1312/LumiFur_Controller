@@ -478,6 +478,12 @@ volatile uint8_t currentView = VIEW_FLAME_EFFECT; // Current view (volatile so t
 const int totalViews = TOTAL_VIEWS;               // Total number of views is now calculated automatically
 // int userBrightness = 20; // Default brightness level (0-255)
 
+// Current fan PWM duty cycle (0–255). 255 = 100 %.
+uint8_t fanSpeed = 255;
+
+// Runtime on/off for the diagnostic OLED (persisted).
+bool hudEnabled = true;
+
 // Plasma animation optimization
 uint16_t plasmaFrameDelay = 15; // ms between plasma updates (was 10)
 // Spiral animation optimization
@@ -1371,14 +1377,13 @@ static FanSpeedCallbacks fanSpeedCallbacks;
 // Applied on the worker task so PWM writes never block the NimBLE stack.
 static void handleBleFanSpeedWriteWork(const BleWorkItem &item)
 {
-  if (item.length < 1)
-    return;
-
-  fanSpeed = item.data[0];
+fanSpeed = item.data[0];
   setFanSpeed(fanSpeed);                       // persist in NVS
 #ifdef FAN_PWM_PIN
   ledcWrite(0, fanSpeed);                      // apply immediately
 #endif
+  hudSetFanSpeed((fanSpeed * 100) / 255);      // Zone 5: 0–100 %
+
   if (item.characteristic != nullptr)
     item.characteristic->setValue(&fanSpeed, 1);
 
@@ -1430,13 +1435,10 @@ static void handleBleOledEnableWriteWork(const BleWorkItem &item)
     return;
 
   hudEnabled = (item.data[0] != 0);
-  setHudEnabled(hudEnabled);
+  setHudEnabled(hudEnabled);                    // persist
 
-  if (hudEnabled)
-  {
-    diagnosticHUD.begin(getOledContrast());
-  }
-  // else: optional – diagnosticHUD.clearDisplay() + display() if desired
+  // HUD task is already running; enable/disable is reflected on next state push.
+  // (If you later add a hard power-off, call it here.)
 
   if (item.characteristic != nullptr)
   {
@@ -1452,9 +1454,8 @@ static void handleBleOledContrastWriteWork(const BleWorkItem &item)
     return;
 
   uint8_t contrast = item.data[0];
-  setOledContrast(contrast);
-  hudState.oledBrightness = contrast;
-  diagnosticHUD.setBrightness(contrast);
+  setOledContrast(contrast);                    // persist
+  hudSetOledBrightness(contrast);               // update shared HUD state (task will redraw)
 
   if (item.characteristic != nullptr)
     item.characteristic->setValue(&contrast, 1);
@@ -4335,11 +4336,17 @@ void setup()
   // Internal diagnostic OLED (shared I2C, ultra-dim default)
   hudEnabled = getHudEnabled();                 // load persisted on/off
   uint8_t oledContrast = getOledContrast();     // load persisted contrast
-  if (hudEnabled && diagnosticHUD.begin(oledContrast)) {
-    Serial.printf("HUD started, contrast 0x%02X\n", oledContrast);
-  } else if (!hudEnabled) {
+  hudSetOledBrightness(oledContrast);           // push to shared state
+  hudSetFanSpeed((fanSpeed * 100) / 255);       // Zone 5 initial value
+  if (hudEnabled)
+  {
+    Serial.printf("HUD enabled, contrast 0x%02X\n", oledContrast);
+  }
+  else
+  {
     Serial.println("HUD disabled by preference");
   }
+
   staticColorModeEnabled = getStaticColorMode();
   hudSetOverlay(overlayMode == 1 ? "Matrix Rain" : overlayMode == 2 ? "TV Static" : overlayMode == 3 ? "Solid" : "Plasma");
   if (staticColorModeEnabled)
@@ -4501,10 +4508,6 @@ void setup()
     pFanSpeedCharacteristic->setCallbacks(&fanSpeedCallbacks);
     pFanSpeedCharacteristic->setValue(&fanSpeed, 1);
     Serial.println("Fan Speed Characteristic created");
-  #endif
-
-  #ifdef FAN_PWM_PIN
-    // (existing fan speed characteristic code stays here)
   #endif
 
   // HUD enable characteristic (0 = off, 1 = on). Matches companion app.
