@@ -1,12 +1,23 @@
 #ifndef BLE_CONSTANTS_H
 #define BLE_CONSTANTS_H
 
-// BLE UUIDs
+/**
+ * @file ble_constants.h
+ * @brief BLE UUIDs and firmware metadata for LumiFur Controller.
+ *
+ * The OLED_BRIGHTNESS characteristic was added so the companion app can
+ * control the internal diagnostic HUD contrast (0x00–0xFF). Default 0x01
+ * keeps the display ultra-dim.
+ */
+
+// ---------------------------------------------------------------------------
+// Service & characteristic UUIDs
+// ---------------------------------------------------------------------------
 #define SERVICE_UUID "01931c44-3867-7740-9867-c822cb7df308"
 #define CHARACTERISTIC_UUID "01931c44-3867-7427-96ab-8d7ac0ae09fe"
 #define CONFIG_CHARACTERISTIC_UUID "01931c44-3867-7427-96ab-8d7ac0ae09ff"
 #define TEMPERATURE_CHARACTERISTIC_UUID "01931c44-3867-7b5d-9774-18350e3e27db"
-#define TEMPERATURE_LOGS_CHARACTERISTIC_UUID "0195eec2-ae6e-74a1-bcd5-215e2365477c" // New Command UUID
+#define TEMPERATURE_LOGS_CHARACTERISTIC_UUID "0195eec2-ae6e-74a1-bcd5-215e2365477c"
 #define COMMAND_CHARACTERISTIC_UUID "0195eec3-06d2-7fd4-a561-49493be3ee41"
 #define BRIGHTNESS_CHARACTERISTIC_UUID "01931c44-3867-7427-96ab-8d7ac0ae09ef"
 
@@ -22,12 +33,14 @@
 
 #define VIDEO_LIST_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0044"
 
-// #define ULTRASOUND_CHARACTERISTIC_UUID  "01931c44-3867-7b5d-9732-12460e3a35db"
+// New: internal OLED contrast control (uint8_t 0x00–0xFF)
+#define OLED_BRIGHTNESS_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0055"
 
-
-// Fallback defines in case PlatformIO doesn't inject them
+// ---------------------------------------------------------------------------
+// Firmware metadata (overridden by PlatformIO build flags when present)
+// ---------------------------------------------------------------------------
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "4.2.7" // Version if not defined
+#define FIRMWARE_VERSION "5.1.0"
 #endif
 
 #define GIT_COMMIT GIT_BRANCH
@@ -56,7 +69,7 @@
 #endif
 
 #ifndef APP_COMPAT_VERSION
-#define APP_COMPAT_VERSION "6.1"
+#define APP_COMPAT_VERSION "14.1.0"
 #endif
 
 #endif // BLE_CONSTANTS_H

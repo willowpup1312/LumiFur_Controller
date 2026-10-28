@@ -1,0 +1,27 @@
+/**
+ * Minimal integration points for LumiFur_Controller
+ *
+ * 1. platformio.ini – add the Adafruit SSD1306 library (already pulled in via GFX):
+ *    lib_deps =
+ *      ...
+ *      adafruit/Adafruit SSD1306@^2.5.9
+ *
+ * 2. src/app/main.cpp – in setup(), after Wire.begin() and other I2C init:
+ *    #include "hardware/LumiFur_HUD_Task.h"
+ *    startLumiFurHudTask();
+ *
+ * 3. Wherever state changes, call the helpers (examples):
+ *    hudSetFace(currentView, viewName);
+ *    hudSetOverlay(overlayMode == 1 ? "Matrix Rain" : "Plasma");
+ *    hudSetLux(lastLux);
+ *    hudSetBoop(blushState != BlushState::Inactive);
+ *    hudSetBleConnected(deviceConnected);
+ *    hudSetMode(sleepModeActive ? MODE_SLEEP : MODE_STANDARD);
+ *    // OLED brightness is handled automatically by the BLE callback
+ *
+ * 4. BLE server setup – create the characteristic and attach the callback
+ *    (see ble_oled_brightness_callbacks.h).
+ *
+ * The HUD task runs at priority 1 and only wakes on notification, so it
+ * cannot interfere with the display task, sensor reads, or BLE worker.
+ */

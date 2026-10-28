@@ -38,6 +38,8 @@
 #include "core/ScrollState.h"
 #include "ble/ble_worker.h"
 #include "perf_tuning.h"
+#include "core/hud/LumiFur_HUD_Task.h"
+#include "ble/ble_oled_brightness_callbacks.h"
 // #include "effects/pixelDustEffect.h" // New effect
 
 // BLE Libraries
@@ -1156,6 +1158,7 @@ void wakeFromSleepMode()
 
   Serial.println(">>> Waking from sleep mode <<<");
   sleepModeActive = false;
+  hudSetMode(MODE_STANDARD);
   currentView = preSleepView; // Restore previous view
   micSetEnabled(viewUsesMic(currentView));
   requestDisplayRefresh();
@@ -1593,6 +1596,7 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
     {
       overlayMode = 0;
     }
+    hudSetOverlay(overlayMode == 1 ? "Matrix Rain" : overlayMode == 2 ? "TV Static" : overlayMode == 3 ? "Solid" : "Plasma");
   }
   setOverlayMode(overlayMode);
   if (item.length >= 11)
@@ -1728,6 +1732,7 @@ static void handleBleBrightnessWriteWork(const BleWorkItem &item)
   }
 
   userBrightness = item.data[0];
+  hudSetMatrixBrightness(map(userBrightness, 0, 255, 0, 100));
   setUserBrightness(userBrightness);
 #if DEBUG_BRIGHTNESS
   Serial.printf("Brightness target set to %u\n", userBrightness);
@@ -3384,6 +3389,8 @@ void updateBlush()
       blushBrightness = 0;
       blushState = BlushState::Inactive;
       disableBlush();
+      hudSetBoop(false);
+      hudSetMode(MODE_STANDARD);
 
       // Revert to previous view if this was an overlay blush
       if (wasBlushOverlay)
@@ -4161,6 +4168,7 @@ void setup()
   initPreferences(); // Initialize Preferences
   autoBrightnessFloor = getAutoBrightnessFloor();
   userBrightness = static_cast<uint8_t>(constrain(getUserBrightness(), 0, 255));
+  hudSetMatrixBrightness(map(userBrightness, 0, 255, 0, 100));
   sliderBrightness = map(userBrightness, 1, 255, 1, 100);
   autoBrightnessEnabled = getAutoBrightness();
   mouthMicBrightnessOverrideEnabled = getMouthMicBrightnessOverride();
@@ -4174,6 +4182,7 @@ void setup()
   overlayMode = getOverlayMode();
   boopMode = getBoopMode();
   staticColorModeEnabled = getStaticColorMode();
+  hudSetOverlay(overlayMode == 1 ? "Matrix Rain" : overlayMode == 2 ? "TV Static" : overlayMode == 3 ? "Solid" : "Plasma");
   if (staticColorModeEnabled)
   {
     auroraModeEnabled = false;
@@ -4229,6 +4238,10 @@ void setup()
     textX = dma_display->width();
     textY = (dma_display->height() - h) / 2 + h; // Center vertically
   */
+
+  // Start the low-priority internal diagnostic OLED HUD task.
+  // Safe if the display is not present; the task exits quietly.
+  startLumiFurHudTask();
 
   ///////////////////// Setup BLE ////////////////////////
   Serial.println("Initializing BLE...");
@@ -4315,6 +4328,19 @@ void setup()
       //NIMBLE_PROPERTY::WRITE_NR |
       NIMBLE_PROPERTY::NOTIFY
     );
+
+  // OLED brightness characteristic (app-controllable contrast for the internal HUD)
+  NimBLECharacteristic *pOledBrightnessCharacteristic = pService->createCharacteristic(
+      OLED_BRIGHTNESS_CHARACTERISTIC_UUID,
+      NIMBLE_PROPERTY::READ |
+          NIMBLE_PROPERTY::WRITE |
+          NIMBLE_PROPERTY::WRITE_NR |
+          NIMBLE_PROPERTY::NOTIFY);
+  static OledBrightnessCallbacks oledBrightnessCallbacks;
+  pOledBrightnessCharacteristic->setCallbacks(&oledBrightnessCallbacks);
+  uint8_t initialOledContrast = 0x01; // ultra-dim default
+  pOledBrightnessCharacteristic->setValue(&initialOledContrast, 1);
+  Serial.println("OLED Brightness Characteristic created");
 
   // Set the callback to handle writes.
   pConfigCharacteristic->setCallbacks(&configCallbacks);
@@ -5462,6 +5488,7 @@ void enterSleepMode()
   Serial.println("Entering sleep mode");
   #endif
   sleepModeActive = true;
+  hudSetMode(MODE_SLEEP);
   micSetEnabled(false);
   applyMouthMicBrightnessPolicy(false);
   preSleepView = currentView;                   // Save current view
@@ -5609,6 +5636,10 @@ void checkSleepMode()
         boopRevertAt = now + (specialView == VIEW_LOADING_BAR ? 3000UL : blushSpan);
         notifyBleTask();
         requestDisplayRefresh();
+        // --- HUD update for special boop reaction ---
+        hudSetBoop(true);
+        hudSetMode(MODE_BOOP_TRIGGER);
+        hudSetFace(currentView, "Face " + String(currentView));
         return;
       }
 
@@ -5618,6 +5649,10 @@ void checkSleepMode()
         blushStateStartTime = now;
         originalViewBeforeBlush = userSelectedView;
         wasBlushOverlay = true;
+        // --- HUD update for normal blush boop ---
+        hudSetBoop(true);
+        hudSetMode(MODE_BOOP_TRIGGER);
+        hudSetFace(currentView, "Face " + String(currentView));
       }
     }
 void loop()
@@ -6060,6 +6095,7 @@ void loop()
                      PROFILE_SECTION("LuxCharacteristic");
                      // Manual brightness is applied immediately on BLE write if autoBrightness is off.
                      updateLux(); // Update lux values
+                     hudSetLux(getAmbientLuxU16()); 
                    });
     }
 

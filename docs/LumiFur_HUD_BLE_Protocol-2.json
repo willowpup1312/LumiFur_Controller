@@ -1,0 +1,74 @@
+{
+  "service_name": "LumiFur_Control_Service",
+  "service_uuid": "01931c44-3867-7740-9867-c822cb7df308",
+  "notes": "OLED brightness is a single-byte characteristic so the app can adjust contrast without a full JSON payload. All other HUD fields can be driven by existing characteristics or by the firmware itself.",
+  "characteristics": [
+    {
+      "name": "OLED_BRIGHTNESS",
+      "uuid": "7f9b8b12-1234-4c55-9b77-a19d55aa0055",
+      "properties": ["READ", "WRITE", "NOTIFY"],
+      "type": "UINT8",
+      "range": "0x00 (off) – 0xFF (max)",
+      "default": "0x01",
+      "description": "Direct SSD1306 contrast register. App writes this byte; firmware applies it immediately via the HUD task."
+    },
+    {
+      "name": "FACE_CONTROL",
+      "uuid": "beb5483e-36e1-4688-b7f5-ea07361b26a8",
+      "properties": ["READ", "WRITE", "NOTIFY"],
+      "type": "JSON",
+      "payload_example": {
+        "face_idx": 4,
+        "face_name": "Happy",
+        "overlay": "Matrix Rain",
+        "detail": "Speed: 5"
+      },
+      "maps_to_struct": ["faceIndex", "currentFaceName", "overlayName", "modeDetailText"]
+    },
+    {
+      "name": "SYSTEM_MODE",
+      "uuid": "1c95d5e3-058f-4cfc-ae7d-22222d1b1001",
+      "properties": ["READ", "WRITE", "NOTIFY"],
+      "type": "UINT8_ENUM",
+      "enum_map": {
+        "0": "MODE_STANDARD",
+        "1": "MODE_SLEEP",
+        "2": "MODE_BOOP_TRIGGER",
+        "3": "MODE_DIZZY",
+        "4": "MODE_PROX_NEAR",
+        "5": "MODE_INT_HEARTS",
+        "6": "MODE_INT_ANGRY",
+        "7": "MODE_STROBE_TX",
+        "8": "MODE_VIRUS_ANIM",
+        "9": "INT_VIRUS_STATIC",
+        "10": "MODE_BLE_PAIRING"
+      },
+      "maps_to_struct": ["sysMode"]
+    },
+    {
+      "name": "HARDWARE_CONFIG",
+      "uuid": "2a7a4a90-3b8c-4f93-8419-33333d1b1002",
+      "properties": ["READ", "WRITE", "NOTIFY"],
+      "type": "JSON",
+      "payload_example": {
+        "matrix_bri": 60,
+        "fan_spd": 75,
+        "nfc_pwr": true
+      },
+      "maps_to_struct": ["matrixBrightness", "fanSpeed", "nfcPower"]
+    },
+    {
+      "name": "TELEMETRY_NOTIFY",
+      "uuid": "3b8b5b01-4c9d-5ea4-9520-44444d1b1003",
+      "properties": ["READ", "NOTIFY"],
+      "type": "JSON",
+      "payload_example": {
+        "lux": 450,
+        "boop": false,
+        "ble_ok": true,
+        "passkey": "849201"
+      },
+      "maps_to_struct": ["lux", "boopActive", "bleConnected", "pairingPasskey"]
+    }
+  ]
+}
