@@ -1,5 +1,6 @@
 #pragma once
 #include <Preferences.h>
+#include "config/debug_config.h"
 
 static constexpr char NAMESPACE[] = "LumiFur";
 static constexpr char KEY_LAST[] = "lastView";
@@ -178,6 +179,78 @@ inline String getSelectedColor()
   return getPrefs().getString("selectedColor", "");
 }
 
+// Unwritten NVS keys return the compile-time flag, so first boot matches the old #define.
+
+// DEBUG_DISABLE_BLE_INDICATOR_LIGHT
+inline bool getDisableBleIndicatorLight()
+{
+  return getPrefs().getBool("bleindoff", DEBUG_DISABLE_BLE_INDICATOR_LIGHT);
+}
+inline void setDisableBleIndicatorLight(bool v)
+{
+  getPrefs().putBool("bleindoff", v);
+}
+
+// DEBUG_DISABLE_BLE_STATUS_ICON
+inline bool getDisableBleStatusIcon()
+{
+  return getPrefs().getBool("blestatusoff", DEBUG_DISABLE_BLE_STATUS_ICON);
+}
+inline void setDisableBleStatusIcon(bool v)
+{
+  getPrefs().putBool("blestatusoff", v);
+}
+
+// DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE
+inline bool getWaveshareBrightnessBoost()
+{
+  return getPrefs().getBool("wsbrightboost", DEBUG_ENABLE_BRIGTHNESS_BOOST_WAVESHARE);
+}
+inline void setWaveshareBrightnessBoost(bool v)
+{
+  getPrefs().putBool("wsbrightboost", v);
+}
+
+// Auto-brightness floor, 0–255. 15 matches the old hardcoded minimum.
+inline uint8_t getAutoBrightnessFloor()
+{
+  return getPrefs().getUChar("autobrightfloor", 15);
+}
+inline void setAutoBrightnessFloor(uint8_t floor)
+{
+  getPrefs().putUChar("autobrightfloor", floor);
+}
+// Config byte 9 — face overlay mode (0 plasma, 1 matrix rain, 2 TV static, 3 solid).
+// Migrates the old bool "matrixrain" key: if the new key is missing and the old
+// bool was true, first read returns 1 so existing devices keep matrix rain.
+inline uint8_t getOverlayMode()
+{
+  // 255 = never written (sentinel). Avoids Preferences::isKey for older cores.
+  uint8_t m = getPrefs().getUChar("overlaymode", 255);
+  if (m == 255)
+  {
+    // Legacy migration from matrixRainInsteadOfPlasma bool.
+    return getPrefs().getBool("matrixrain", false) ? 1 : 0;
+  }
+  return (m > 3) ? 0 : m;
+}
+inline void setOverlayMode(uint8_t mode)
+{
+  if (mode > 3)
+  {
+    mode = 0;
+  }
+  getPrefs().putUChar("overlaymode", mode);
+}
+// 0 default, 1 advanced boop 1, 2 advanced boop 2, 3 advanced boop 4.
+inline uint8_t getBoopMode()
+{
+  return getPrefs().getUChar("boopmode", 0);
+}
+inline void setBoopMode(uint8_t mode)
+{
+  getPrefs().putUChar("boopmode", mode);
+}
 // Clear all preferences - Implement feature to reset controller to default settings
 inline void clearPreferences()
 {

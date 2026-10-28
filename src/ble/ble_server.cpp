@@ -1,5 +1,6 @@
 #include "ble/ble_server.h"
 #include "ble/ble_state.h"
+#include "core/hud/LumiFur_HUD_Task.h"
 
 #include <Arduino.h>
 #include <array>
@@ -91,6 +92,9 @@ void ServerCallbacks::onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
 
     deviceConnected = true;
 
+    // Update HUD BLE status (low-priority task, non-blocking)
+    hudSetBleConnected(true);
+
     /**
      *  We can use the connection handle here to ask for different connection parameters.
      *  Args: connection handle, min connection interval, max connection interval
@@ -110,6 +114,10 @@ void ServerCallbacks::onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connIn
 {
     removePairingCandidate(connInfo.getConnHandle());
     deviceConnected = pServer->getConnectedCount() > 0;
+
+    // Update HUD BLE status
+    hudSetBleConnected(deviceConnected);
+
     setPairingState(false, false, 0, true);
     const bool resetPending = isPairingResetPending();
     if (resetPending && pServer->getConnectedCount() == 0)
@@ -144,6 +152,12 @@ uint32_t ServerCallbacks::onPassKeyDisplay()
     const PairingSnapshot snapshot = getPairingSnapshot();
     const uint32_t passkey = snapshot.passkeyValid ? snapshot.passkey : (esp_random() % 1000000);
     setPairingState(true, true, passkey, true);
+
+    // Show passkey on the internal OLED HUD
+    char passkeyStr[8];
+    snprintf(passkeyStr, sizeof(passkeyStr), "%06" PRIu32, passkey);
+    hudSetPairingPasskey(String(passkeyStr));
+
 #if DEBUG_BLE
     Serial.printf("Server Passkey Display: %06" PRIu32 "\n", passkey);
 #endif
@@ -168,6 +182,7 @@ void ServerCallbacks::onAuthenticationComplete(NimBLEConnInfo &connInfo)
     {
         Serial.printf("Encryption not established for: %s\n", connInfo.getAddress().toString().c_str());
         setPairingState(false, false, 0, true);
+        hudSetPairingPasskey(""); // clear pairing overlay
         if (pServer != nullptr)
         {
             pServer->disconnect(connInfo.getConnHandle());
@@ -181,5 +196,6 @@ void ServerCallbacks::onAuthenticationComplete(NimBLEConnInfo &connInfo)
     }
 
     setPairingState(false, false, 0, true);
+    hudSetPairingPasskey(""); // pairing finished – clear overlay
     Serial.printf("Secured connection to: %s\n", connInfo.getAddress().toString().c_str());
 }

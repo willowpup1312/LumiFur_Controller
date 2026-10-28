@@ -622,3 +622,89 @@ MonoVideoDebugInfo MonoVideoPlayer::debugInfo() const
   info.maxCatchupFrames = maxCatchupFrames_;
   return info;
 }
+
+// ===== Multi-file support =====
+
+bool MonoVideoPlayer::scanAvailableVideos()
+{
+  videoCount_ = 0;
+  File directory = filesystem_.open("/videos");
+  if (!directory || !directory.isDirectory())
+  {
+    return false;
+  }
+
+  for (File entry = directory.openNextFile(); entry && videoCount_ < kMaxVideos; entry = directory.openNextFile())
+  {
+    const char *entryName = entry.name();
+    if (entry.isDirectory() || !hasCaseInsensitiveSuffix(entryName, ".lfv"))
+    {
+      entry.close();
+      continue;
+    }
+
+    const char *base = strrchr(entryName, '/');
+    const char *name = base ? base + 1 : entryName;
+    strncpy(videoNames_[videoCount_], name, kMaxNameLen - 1);
+    videoNames_[videoCount_][kMaxNameLen - 1] = '\0';
+    ++videoCount_;
+    entry.close();
+  }
+  directory.close();
+
+  // Prefer the originally requested path if present
+  for (size_t i = 0; i < videoCount_; ++i)
+  {
+    char full[96];
+    snprintf(full, sizeof(full), "/videos/%s", videoNames_[i]);
+    if (strcmp(full, path_) == 0)
+    {
+      currentVideoIndex_ = i;
+      break;
+    }
+  }
+
+  return videoCount_ > 0;
+}
+
+const char *MonoVideoPlayer::availableVideoName(size_t index) const
+{
+  if (index >= videoCount_) return "";
+  return videoNames_[index];
+}
+
+const char *MonoVideoPlayer::currentVideoName() const
+{
+  if (currentVideoIndex_ >= videoCount_) return "";
+  return videoNames_[currentVideoIndex_];
+}
+
+bool MonoVideoPlayer::selectVideoByIndex(size_t index)
+{
+  if (index >= videoCount_) return false;
+
+  char fullPath[96];
+  snprintf(fullPath, sizeof(fullPath), "/videos/%s", videoNames_[index]);
+
+  closeVideo();
+  clearState();
+  currentVideoIndex_ = index;
+
+  if (!tryOpenVideoPath(fullPath))
+  {
+    setError("Select failed");
+    return false;
+  }
+
+  if (!decodeNextFrame())
+  {
+    closeVideo();
+    setError("Decode failed");
+    return false;
+  }
+
+  frameLoaded_ = true;
+  lastFrameMicros_ = micros();
+  currentFrameIndex_ = 0;
+  return true;
+}

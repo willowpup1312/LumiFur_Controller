@@ -49,6 +49,7 @@ NimBLECharacteristic *pStaticColorCharacteristic = nullptr;
 NimBLECharacteristic *pStrobeSettingsCharacteristic = nullptr;
 NimBLECharacteristic *pOtaCharacteristic = nullptr;
 NimBLECharacteristic *pInfoCharacteristic = nullptr;
+NimBLECharacteristic *pVideoListCharacteristic = nullptr;
 
 std::string fwVersion = FIRMWARE_VERSION;
 std::string deviceModel = DEVICE_MODEL;
