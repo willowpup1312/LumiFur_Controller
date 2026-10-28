@@ -33,8 +33,14 @@
 
 #define VIDEO_LIST_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0044"
 
-// New: internal OLED contrast control (uint8_t 0x00–0xFF)
-#define OLED_BRIGHTNESS_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0055"
+// Fan speed (uint8_t 0x00–0xFF, 255 = 100 %). Matches companion app.
+#define FAN_SPEED_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0055"
+
+// HUD enable (uint8_t 0 = off, 1 = on). Matches companion app.
+#define HUD_ENABLED_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0066"
+
+// Internal OLED contrast (uint8_t 0x00–0xFF). Matches companion app.
+#define OLED_CONTRAST_CHARACTERISTIC_UUID "7f9b8b12-1234-4c55-9b77-a19d55aa0077"
 
 // ---------------------------------------------------------------------------
 // Firmware metadata (overridden by PlatformIO build flags when present)

@@ -251,6 +251,37 @@ inline void setBoopMode(uint8_t mode)
 {
   getPrefs().putUChar("boopmode", mode);
 }
+
+// Fan speed 0–255 (255 = 100 %). Default full speed.
+inline uint8_t getFanSpeed()
+{
+  return getPrefs().getUChar("fanspeed", 255);
+}
+inline void setFanSpeed(uint8_t speed)
+{
+  getPrefs().putUChar("fanspeed", speed);
+}
+
+// HUD / OLED enable (default on).
+inline bool getHudEnabled()
+{
+  return getPrefs().getBool("hudenabled", true);
+}
+inline void setHudEnabled(bool enabled)
+{
+  getPrefs().putBool("hudenabled", enabled);
+}
+
+// OLED contrast 0x00–0xFF (default ultra-dim 0x01).
+inline uint8_t getOledContrast()
+{
+  return getPrefs().getUChar("oledcontrast", 0x01);
+}
+inline void setOledContrast(uint8_t contrast)
+{
+  getPrefs().putUChar("oledcontrast", contrast);
+}
+
 // Clear all preferences - Implement feature to reset controller to default settings
 inline void clearPreferences()
 {

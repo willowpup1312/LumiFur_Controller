@@ -65,6 +65,9 @@ class VirtualMatrixPanel;
 // Button pins
 #define BUTTON_UP 6
 #define BUTTON_DOWN 7
+// PWM fan control pin. Bottom breakout A0 (GPIO 12) — JST connector.
+// Do not use GPIO 11 (A4); it is reserved for the microphone.
+#define FAN_PWM_PIN 12
 #include <Wire.h>              // For I2C sensors
 #define APDS_SDA_PIN 16 // STEMMA QT SDA on MatrixPortal S3
 #define APDS_SCL_PIN 17 // STEMMA QT SCL on MatrixPortal S3
@@ -100,6 +103,10 @@ extern Adafruit_NeoPixel statusPixel;
 // Button pins
 #define BUTTON_UP 6
 #define BUTTON_DOWN 7
+
+// PWM fan control pin. Bottom breakout A0 (GPIO 12) — JST connector.
+// Do not use GPIO 11 (A4); it is reserved for the microphone.
+#define FAN_PWM_PIN 12
 
 #include <Wire.h>              // For I2C sensors
 #define APDS_SDA_PIN 16 // STEMMA QT SDA on MatrixPortal S3

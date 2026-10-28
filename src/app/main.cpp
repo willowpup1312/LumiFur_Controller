@@ -942,6 +942,8 @@ static void handleBleConfigWriteWork(const BleWorkItem &item);
 static void handleBleBrightnessWriteWork(const BleWorkItem &item);
 static void handleBleStaticColorWriteWork(const BleWorkItem &item);
 static void handleBleStrobeSettingsWriteWork(const BleWorkItem &item);
+static void handleBleOledEnableWriteWork(const BleWorkItem &item);
+static void handleBleOledContrastWriteWork(const BleWorkItem &item);
 
 static void bleRecordQueueDepth(UBaseType_t depth)
 {
@@ -1344,6 +1346,121 @@ class BrightnessCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 static BrightnessCallbacks brightnessCallbacks;
+
+#ifdef FAN_PWM_PIN
+// Callback for the fan-speed characteristic (queues work so the BLE stack stays light).
+class FanSpeedCallbacks : public NimBLECharacteristicCallbacks
+{
+  void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    ScopedPerfTelemetryDuration perfScope(PerfDurationId::BleCallback);
+    auto val = pChr->getValue();
+    if (val.size() >= 1)
+    {
+      if (!bleQueueByte(BleWorkType::FanSpeedWrite, pChr, static_cast<uint8_t>(val[0])))
+      {
+        Serial.println("BLE fan speed queue full, dropping update.");
+      }
+    }
+  }
+};
+static FanSpeedCallbacks fanSpeedCallbacks;
+#endif
+
+// Applied on the worker task so PWM writes never block the NimBLE stack.
+static void handleBleFanSpeedWriteWork(const BleWorkItem &item)
+{
+  if (item.length < 1)
+    return;
+
+  fanSpeed = item.data[0];
+  setFanSpeed(fanSpeed);                       // persist in NVS
+#ifdef FAN_PWM_PIN
+  ledcWrite(0, fanSpeed);                      // apply immediately
+#endif
+  if (item.characteristic != nullptr)
+    item.characteristic->setValue(&fanSpeed, 1);
+
+  Serial.printf("Fan speed set to %u (%u%%)\n", fanSpeed, (fanSpeed * 100) / 255);
+}
+
+// Callback for HUD enable (queues work so the BLE stack stays light).
+class OledEnableCallbacks : public NimBLECharacteristicCallbacks
+{
+  void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    ScopedPerfTelemetryDuration perfScope(PerfDurationId::BleCallback);
+    auto val = pChr->getValue();
+    if (val.size() >= 1)
+    {
+      if (!bleQueueByte(BleWorkType::OledEnableWrite, pChr, static_cast<uint8_t>(val[0])))
+      {
+        Serial.println("BLE HUD enable queue full, dropping update.");
+      }
+    }
+  }
+};
+static OledEnableCallbacks oledEnableCallbacks;
+
+// Callback for OLED contrast.
+class OledContrastCallbacks : public NimBLECharacteristicCallbacks
+{
+  void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override
+  {
+    (void)connInfo;
+    ScopedPerfTelemetryDuration perfScope(PerfDurationId::BleCallback);
+    auto val = pChr->getValue();
+    if (val.size() >= 1)
+    {
+      if (!bleQueueByte(BleWorkType::OledContrastWrite, pChr, static_cast<uint8_t>(val[0])))
+      {
+        Serial.println("BLE OLED contrast queue full, dropping update.");
+      }
+    }
+  }
+};
+static OledContrastCallbacks oledContrastCallbacks;
+
+// Applied on the worker task.
+static void handleBleOledEnableWriteWork(const BleWorkItem &item)
+{
+  if (item.length < 1)
+    return;
+
+  hudEnabled = (item.data[0] != 0);
+  setHudEnabled(hudEnabled);
+
+  if (hudEnabled)
+  {
+    diagnosticHUD.begin(getOledContrast());
+  }
+  // else: optional – diagnosticHUD.clearDisplay() + display() if desired
+
+  if (item.characteristic != nullptr)
+  {
+    uint8_t v = hudEnabled ? 1 : 0;
+    item.characteristic->setValue(&v, 1);
+  }
+  Serial.printf("HUD enabled set to %s\n", hudEnabled ? "ON" : "OFF");
+}
+
+static void handleBleOledContrastWriteWork(const BleWorkItem &item)
+{
+  if (item.length < 1)
+    return;
+
+  uint8_t contrast = item.data[0];
+  setOledContrast(contrast);
+  hudState.oledBrightness = contrast;
+  diagnosticHUD.setBrightness(contrast);
+
+  if (item.characteristic != nullptr)
+    item.characteristic->setValue(&contrast, 1);
+
+  Serial.printf("OLED contrast set to 0x%02X\n", contrast);
+}
 
 class VideoListCallbacks : public NimBLECharacteristicCallbacks
 {
@@ -1842,6 +1959,15 @@ static void bleWorkerTask(void *param)
       break;
     case BleWorkType::AutoBrightnessFloorWrite:
       handleBleAutoBrightnessFloorWriteWork(item);
+      break;
+    case BleWorkType::FanSpeedWrite:
+      handleBleFanSpeedWriteWork(item);
+      break;
+    case BleWorkType::OledEnableWrite:
+      handleBleOledEnableWriteWork(item);
+      break;
+    case BleWorkType::OledContrastWrite:
+      handleBleOledContrastWriteWork(item);
       break;
     case BleWorkType::StaticColorWrite:
       handleBleStaticColorWriteWork(item);
@@ -4196,6 +4322,24 @@ void setup()
   auroraModeEnabled = getAuroraMode();
   overlayMode = getOverlayMode();
   boopMode = getBoopMode();
+    // Load persisted fan speed (default 100 %) and apply it.
+  fanSpeed = getFanSpeed();
+  #ifdef FAN_PWM_PIN
+    // 25 kHz PWM, 8-bit resolution (standard for 4-wire PC fans).
+    ledcSetup(0, 25000, 8);          // channel 0
+    ledcAttachPin(FAN_PWM_PIN, 0);
+    ledcWrite(0, fanSpeed);
+    Serial.printf("Fan PWM initialised on GPIO %d, speed %u\n", FAN_PWM_PIN, fanSpeed);
+  #endif
+
+  // Internal diagnostic OLED (shared I2C, ultra-dim default)
+  hudEnabled = getHudEnabled();                 // load persisted on/off
+  uint8_t oledContrast = getOledContrast();     // load persisted contrast
+  if (hudEnabled && diagnosticHUD.begin(oledContrast)) {
+    Serial.printf("HUD started, contrast 0x%02X\n", oledContrast);
+  } else if (!hudEnabled) {
+    Serial.println("HUD disabled by preference");
+  }
   staticColorModeEnabled = getStaticColorMode();
   hudSetOverlay(overlayMode == 1 ? "Matrix Rain" : overlayMode == 2 ? "TV Static" : overlayMode == 3 ? "Solid" : "Plasma");
   if (staticColorModeEnabled)
@@ -4344,18 +4488,50 @@ void setup()
       NIMBLE_PROPERTY::NOTIFY
     );
 
-  // OLED brightness characteristic (app-controllable contrast for the internal HUD)
-  NimBLECharacteristic *pOledBrightnessCharacteristic = pService->createCharacteristic(
-      OLED_BRIGHTNESS_CHARACTERISTIC_UUID,
+    #ifdef FAN_PWM_PIN
+    // Fan speed characteristic (0–255 duty cycle, 255 = 100 %).
+    // UUID matches the companion app (feature/internal_oled).
+    pFanSpeedCharacteristic = pService->createCharacteristic(
+        FAN_SPEED_CHARACTERISTIC_UUID,
+        NIMBLE_PROPERTY::READ |
+            NIMBLE_PROPERTY::WRITE |
+            NIMBLE_PROPERTY::WRITE_NR |
+            NIMBLE_PROPERTY::NOTIFY);
+    static FanSpeedCallbacks fanSpeedCallbacks;
+    pFanSpeedCharacteristic->setCallbacks(&fanSpeedCallbacks);
+    pFanSpeedCharacteristic->setValue(&fanSpeed, 1);
+    Serial.println("Fan Speed Characteristic created");
+  #endif
+
+  #ifdef FAN_PWM_PIN
+    // (existing fan speed characteristic code stays here)
+  #endif
+
+  // HUD enable characteristic (0 = off, 1 = on). Matches companion app.
+  pHudEnabledCharacteristic = pService->createCharacteristic(
+      HUD_ENABLED_CHARACTERISTIC_UUID,
       NIMBLE_PROPERTY::READ |
           NIMBLE_PROPERTY::WRITE |
           NIMBLE_PROPERTY::WRITE_NR |
           NIMBLE_PROPERTY::NOTIFY);
-  static OledBrightnessCallbacks oledBrightnessCallbacks;
-  pOledBrightnessCharacteristic->setCallbacks(&oledBrightnessCallbacks);
-  uint8_t initialOledContrast = 0x01; // ultra-dim default
-  pOledBrightnessCharacteristic->setValue(&initialOledContrast, 1);
-  Serial.println("OLED Brightness Characteristic created");
+  static OledEnableCallbacks oledEnableCallbacks;
+  pHudEnabledCharacteristic->setCallbacks(&oledEnableCallbacks);
+  uint8_t initHud = hudEnabled ? 1 : 0;
+  pHudEnabledCharacteristic->setValue(&initHud, 1);
+  Serial.println("HUD Enabled Characteristic created");
+
+  // OLED contrast characteristic (0x00–0xFF). Matches companion app.
+  pOledContrastCharacteristic = pService->createCharacteristic(
+      OLED_CONTRAST_CHARACTERISTIC_UUID,
+      NIMBLE_PROPERTY::READ |
+          NIMBLE_PROPERTY::WRITE |
+          NIMBLE_PROPERTY::WRITE_NR |
+          NIMBLE_PROPERTY::NOTIFY);
+  static OledContrastCallbacks oledContrastCallbacks;
+  pOledContrastCharacteristic->setCallbacks(&oledContrastCallbacks);
+  uint8_t initContrast = getOledContrast();
+  pOledContrastCharacteristic->setValue(&initContrast, 1);
+  Serial.println("OLED Contrast Characteristic created");
 
   // Set the callback to handle writes.
   pConfigCharacteristic->setCallbacks(&configCallbacks);

@@ -49,6 +49,9 @@ extern NimBLECharacteristic *pStaticColorCharacteristic;
 extern NimBLECharacteristic *pStrobeSettingsCharacteristic;
 extern NimBLECharacteristic *pOtaCharacteristic;
 extern NimBLECharacteristic *pInfoCharacteristic;
+extern NimBLECharacteristic *pFanSpeedCharacteristic;
+extern NimBLECharacteristic *pHudEnabledCharacteristic;
+extern NimBLECharacteristic *pOledContrastCharacteristic;
 
 extern std::string fwVersion;
 extern std::string deviceModel;
