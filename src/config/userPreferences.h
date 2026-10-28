@@ -220,14 +220,27 @@ inline void setAutoBrightnessFloor(uint8_t floor)
 {
   getPrefs().putUChar("autobrightfloor", floor);
 }
-// Global face fill. False keeps plasma. True stamps matrix rain into the same masks.
-inline bool getMatrixRainInsteadOfPlasma()
+// Config byte 9 — face overlay mode (0 plasma, 1 matrix rain, 2 TV static, 3 solid).
+// Migrates the old bool "matrixrain" key: if the new key is missing and the old
+// bool was true, first read returns 1 so existing devices keep matrix rain.
+inline uint8_t getOverlayMode()
 {
-  return getPrefs().getBool("matrixrain", false);
+  // 255 = never written (sentinel). Avoids Preferences::isKey for older cores.
+  uint8_t m = getPrefs().getUChar("overlaymode", 255);
+  if (m == 255)
+  {
+    // Legacy migration from matrixRainInsteadOfPlasma bool.
+    return getPrefs().getBool("matrixrain", false) ? 1 : 0;
+  }
+  return (m > 3) ? 0 : m;
 }
-inline void setMatrixRainInsteadOfPlasma(bool v)
+inline void setOverlayMode(uint8_t mode)
 {
-  getPrefs().putBool("matrixrain", v);
+  if (mode > 3)
+  {
+    mode = 0;
+  }
+  getPrefs().putUChar("overlaymode", mode);
 }
 // 0 default, 1 advanced boop 1, 2 advanced boop 2, 3 advanced boop 4.
 inline uint8_t getBoopMode()

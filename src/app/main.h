@@ -63,7 +63,7 @@ enum View
   VIEW_ALT_FACE,
   VIEW_VIDEO_PLAYER,
   VIEW_MATRIX_RAIN,
-  VIEW_MATRIX_FACE,
+  VIEW_TV_STATIC,  // full-panel TV static (replaces VIEW_MATRIX_FACE)
   VIEW_ANGRY_FACE, // furrowed brows, narrowed eyes
   //VIEW_LGBT_FLAG
 
@@ -92,8 +92,10 @@ bool configApplyAuroraMode = false;
 bool configApplyAccelerometer = true;
 bool configApplyConstantColor = false; // Variable to track constant color application
 // BLE slider. Raises the auto-brightness minimum. 15 is the old floor.
-// Config byte 9. When true, face plasma masks render matrix rain instead of aurora.
-bool matrixRainInsteadOfPlasma = false;
+// Config byte 9. Face-mask fill mode for plasma-style faces:
+//   0 = plasma (default), 1 = matrix rain, 2 = TV static, 3 = solid color.
+// Solid color uses the same RGB as the STATIC_COLOR characteristic / VIEW_STATIC_COLOR.
+uint8_t overlayMode = 0;
 uint8_t autoBrightnessFloor = 15;
 // Config byte 10. 0 default, 1 advanced 1, 2 advanced 2, 3 advanced 4.
 uint8_t boopMode = 0;

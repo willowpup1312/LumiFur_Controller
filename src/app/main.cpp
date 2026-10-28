@@ -32,6 +32,7 @@
 #include "effects/fluidEffect.h"
 #include "effects/monoVideoPlayer.h"
 #include "effects/matrixRainEffect.h"
+#include "effects/tvStaticEffect.h"
 #include "core/AnimationState.h"
 #include "core/InternalTemperature.h"
 #include "core/ScrollState.h"
@@ -1082,7 +1083,6 @@ static bool viewUsesMic(int view)
   case VIEW_UWU_EYES:
   case VIEW_CIRCLE_EYES:
   case VIEW_ALT_FACE:
-  case VIEW_MATRIX_FACE:   // ADD — mouth mic on face rain
     return true;
   default:
     return false;
@@ -1584,12 +1584,17 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
   {
     waveshareBrightnessBoost = (item.data[8] != 0);
   }
-    // Byte 9. A short packet leaves the saved value alone.
+  // Byte 9. Overlay mode: 0 plasma, 1 matrix rain, 2 TV static, 3 solid.
+  // A short packet leaves the saved value alone.
   if (item.length >= 10)
   {
-    matrixRainInsteadOfPlasma = (item.data[9] != 0);
+    overlayMode = item.data[9];
+    if (overlayMode > 3)
+    {
+      overlayMode = 0;
+    }
   }
-  setMatrixRainInsteadOfPlasma(matrixRainInsteadOfPlasma);
+  setOverlayMode(overlayMode);
   if (item.length >= 11)
   {
     boopMode = item.data[10];
@@ -1633,8 +1638,11 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
   Serial.println(disableBleStatusIcon ? "Hidden" : "Shown");
   Serial.print("  Waveshare boost: ");
   Serial.println(waveshareBrightnessBoost ? "Enabled" : "Disabled");
-  Serial.print("  Matrix fill:     ");
-  Serial.println(matrixRainInsteadOfPlasma ? "Matrix rain" : "Plasma");
+  Serial.print("  Overlay mode:    ");
+  {
+    static const char *kOverlayNames[] = {"Plasma", "Matrix rain", "TV static", "Solid"};
+    Serial.println(kOverlayNames[overlayMode <= 3 ? overlayMode : 0]);
+  }
   Serial.print("  Boop mode:       ");
   Serial.println(boopMode);
 #endif
@@ -1651,7 +1659,7 @@ static void handleBleConfigWriteWork(const BleWorkItem &item)
         static_cast<uint8_t>(disableBleIndicatorLight ? 1 : 0),
         static_cast<uint8_t>(disableBleStatusIcon ? 1 : 0),
         static_cast<uint8_t>(waveshareBrightnessBoost ? 1 : 0),
-        static_cast<uint8_t>(matrixRainInsteadOfPlasma ? 1 : 0),
+        static_cast<uint8_t>(overlayMode),
         static_cast<uint8_t>(boopMode)};
     item.characteristic->setValue(canonicalConfig, sizeof(canonicalConfig));                                 // 10 boop mode                                                      // 10
     item.characteristic->setValue(canonicalConfig, sizeof(canonicalConfig));
@@ -2034,7 +2042,7 @@ static unsigned long viewFrameIntervalMillis(int view)
   case VIEW_CIRCLE_EYES:
   case VIEW_ALT_FACE:
     return PATTERN_PLASMA_FRAME_INTERVAL_MS;
-  case VIEW_MATRIX_FACE:   // ADD
+  case VIEW_TV_STATIC:   // ADD
     return PATTERN_PLASMA_FRAME_INTERVAL_MS;
   case VIEW_DVD_LOGO:
     return dvdUpdateInterval;
@@ -2398,13 +2406,21 @@ void drawPlasmaXbm(int x, int y, int width, int height, const uint8_t *xbm,
                    uint8_t brightnessScale = 255, bool bypassGlobalBrightness = false)
 {
 
-  // Global toggle: same mask, matrix rain instead of the plasma fill.
-  if (matrixRainInsteadOfPlasma)
+  // Config byte 9 (overlayMode): same mask, alternate fill instead of plasma.
+  // 0 = plasma (fall through), 1 = matrix rain, 2 = TV static, 3 = solid color.
+  if (overlayMode == 1)
   {
     matrixRainAdvanceColumns();
     drawMatrixRainThroughXbm(x, y, width, height, xbm);
     return;
   }
+  if (overlayMode == 2)
+  {
+    drawTvStaticThroughXbm(x, y, width, height, xbm);
+    return;
+  }
+  // overlayMode == 3 falls through into the existing staticColorMode path below
+  // by forcing solid fill via staticColorModeEnabled-equivalent logic.
 
   const int byteWidth = (width + 7) >> 3;
   if (byteWidth <= 0)
@@ -2412,7 +2428,7 @@ void drawPlasmaXbm(int x, int y, int width, int height, const uint8_t *xbm,
     return;
   }
 
-  const bool useStaticColorMode = staticColorModeEnabled;
+  const bool useStaticColorMode = staticColorModeEnabled || (overlayMode == 3);
   const uint16_t combinedBrightnessScale = bypassGlobalBrightness
                                                ? micBrightnessToFixedScale(brightnessScale)
                                                : static_cast<uint16_t>(
@@ -2621,12 +2637,16 @@ void drawBitmapAdvanced(int x, int y, int width, int height, const uint8_t *bitm
                         uint16_t color, int progress, bool usePlasma,
                         uint8_t time_offset = 0, float scale = 5.0, float animSpeed = 0.2f)
 {
-  // Byte 9. Eyes use this path, not drawPlasmaXbm.
-  // Byte 9. Eyes use this path, not drawPlasmaXbm.
-  if (matrixRainInsteadOfPlasma && usePlasma && bitmap != nullptr)
+  // Config byte 9 (overlayMode). Eyes use this path, not drawPlasmaXbm.
+  if (overlayMode == 1 && usePlasma && bitmap != nullptr)
   {
     matrixRainAdvanceColumns();
     drawMatrixRainThroughXbm(x, y, width, height, bitmap);
+    return;
+  }
+  if (overlayMode == 2 && usePlasma && bitmap != nullptr)
+  {
+    drawTvStaticThroughXbm(x, y, width, height, bitmap);
     return;
   }
   const int byteWidth = (width + 7) / 8;
@@ -2635,9 +2655,9 @@ void drawBitmapAdvanced(int x, int y, int width, int height, const uint8_t *bitm
   // --- Blink Effect Calculation ---
   const float w = 0.005f + (1.0f - 0.005f) * (progress / 100.0f);
 
-  const bool enablePlasma = usePlasma && !staticColorModeEnabled;
+  const bool enablePlasma = usePlasma && !staticColorModeEnabled && overlayMode != 3;
   CRGB staticColorValue;
-  if (staticColorModeEnabled)
+  if (staticColorModeEnabled || overlayMode == 3)
   {
     ensureStaticColorLoaded();
     staticColorValue = gStaticColorState.color;
@@ -4151,7 +4171,7 @@ void setup()
   accelerometerEnabled = getAccelerometerEnabled();
   sleepModeEnabled = getSleepMode();
   auroraModeEnabled = getAuroraMode();
-  matrixRainInsteadOfPlasma = getMatrixRainInsteadOfPlasma();
+  overlayMode = getOverlayMode();
   boopMode = getBoopMode();
   staticColorModeEnabled = getStaticColorMode();
   if (staticColorModeEnabled)
@@ -4310,7 +4330,7 @@ void setup()
       static_cast<uint8_t>(disableBleIndicatorLight ? 1 : 0),          // 6
       static_cast<uint8_t>(disableBleStatusIcon ? 1 : 0),              // 7
       static_cast<uint8_t>(waveshareBrightnessBoost ? 1 : 0),          // 8
-      static_cast<uint8_t>(matrixRainInsteadOfPlasma ? 1 : 0),         // 9
+      static_cast<uint8_t>(overlayMode),         // 9
       static_cast<uint8_t>(boopMode)};                                 // 10
 
   pConfigCharacteristic->setValue(initValue, sizeof(initValue));
@@ -4547,7 +4567,8 @@ Serial.println("Strobe Settings Characteristic created");
   updateGlobalBrightnessScale(userBrightness);
   syncBrightnessState(userBrightness);
   initFlameEffect(dma_display);
-  initMatrixRainEffect(dma_display);   // ADD — this branch is what MatrixPortal uses
+  initMatrixRainEffect(dma_display);
+  initTvStaticEffect(dma_display);   // ADD — this branch is what MatrixPortal uses
 #else
   chain = new MatrixPanel_I2S_DMA(mxconfig);
   chain->begin();
@@ -4555,7 +4576,8 @@ Serial.println("Strobe Settings Characteristic created");
   syncBrightnessState(userBrightness);
   matrix = new VirtualMatrixPanel((*chain), NUM_ROWS, NUM_COLS, PANEL_WIDTH, PANEL_HEIGHT, CHAIN_TOP_LEFT_DOWN);
   initFlameEffect(matrix);
-  initMatrixRainEffect(matrix);        // already present (~line 4270)
+  initMatrixRainEffect(matrix);
+  initTvStaticEffect(matrix);
 #endif
 
   dma_display->clearScreen();
@@ -5059,37 +5081,9 @@ static void renderMatrixRainView() {
   updateAndDrawMatrixRainEffect();
 }
 
-static void renderMatrixFaceView() {
-  dma_display->fillScreen(0);
-
-  const int eyeW = 32;
-  const int eyeH = 16;
-  const int rightEyeX = 0;
-  const int rightEyeY = 0;
-  const int leftEyeX = 96;
-  const int leftEyeY = 0;
-
-  const int noseW = 8;
-  const int noseH = 8;
-  const int rightNoseX = 56;
-  const int leftNoseX = 64;
-  const int noseY = 14;
-
-  const int mouthW = 64;
-  const int mouthH = 22;
-  const int mouthY = 10;
-
-    matrixRainAdvanceColumns();
-
-  drawMatrixRainThroughXbm(rightEyeX, rightEyeY, eyeW, eyeH, (const uint8_t *)Eye);
-  drawMatrixRainThroughXbm(leftEyeX, leftEyeY, eyeW, eyeH, (const uint8_t *)EyeL);
-
-  drawMatrixRainThroughXbm(rightNoseX, noseY, noseW, noseH, (const uint8_t *)nose);
-  drawMatrixRainThroughXbm(leftNoseX, noseY, noseW, noseH, (const uint8_t *)noseL);
-
-  prepareInterpolatedMouthFrames(micGetMouthOpenness());
-  drawMatrixRainThroughXbm(0, mouthY, mouthW, mouthH, gMouthFrameRight);
-  drawMatrixRainThroughXbm(64, mouthY, mouthW, mouthH, gMouthFrameLeft);
+// Full-panel TV static (VIEW_TV_STATIC). Replaces the old matrix-face view.
+static void renderTvStaticView() {
+  updateAndDrawTvStaticEffect();
 }
 
 static void renderFullscreenSpiralPalette()
@@ -5207,7 +5201,7 @@ static const ViewRenderFunc VIEW_RENDERERS[TOTAL_VIEWS] = {
     renderFaceWithPlasma,          // VIEW_ALT_FACE
     renderVideoPlayerView,         // VIEW_VIDEO_PLAYER
     renderMatrixRainView,          // VIEW_MATRIX_RAIN
-    renderMatrixFaceView,          // VIEW_MATRIX_FACE
+    renderTvStaticView,          // VIEW_TV_STATIC
     renderFaceWithPlasma,          // VIEW_ANGRY_FACE
 };
 
@@ -5285,9 +5279,13 @@ void displayCurrentView(int view)
     {
       initFlameEffect(dma_display);
     }
-    if (view == VIEW_MATRIX_RAIN || view == VIEW_MATRIX_FACE)
+    if (view == VIEW_MATRIX_RAIN)
     {
       initMatrixRainEffect(dma_display);
+    }
+    if (view == VIEW_TV_STATIC)
+    {
+      initTvStaticEffect(dma_display);
     }
     if (view == VIEW_PIXEL_DUST)
     {
