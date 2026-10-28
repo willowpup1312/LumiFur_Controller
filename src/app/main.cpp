@@ -325,7 +325,10 @@ static bool initializeVideoStorage()
 }
 
 #if DEBUG_MODE
-constexpr uint32_t SLOW_SECTION_THRESHOLD_US = 2000; // Flag non-render work that takes >2ms
+// Raised from 2000 → 5000 so a normal ~2.5 ms LIS3DH I2C read (and the
+// MotionDetection wrapper around it) no longer spams the serial log.
+// Real problems (render stalls, long BLE work, etc.) will still be flagged.
+constexpr uint32_t SLOW_SECTION_THRESHOLD_US = 5000; // Flag non-render work that takes >5ms
 #define CONCAT_INNER(a, b) a##b
 #define CONCAT(a, b) CONCAT_INNER(a, b)
 struct ScopedSectionTimer
@@ -4130,6 +4133,18 @@ void setup()
     delay(10);
   }
   delay(50);
+
+// ---- I2C bus init (do this before any sensor begin()) ----
+  // MatrixPortal ESP32-S3 STEMMA QT / onboard sensors use these pins.
+  // Default Arduino Wire is 100 kHz; LIS3DH + APDS9960 both support 400 kHz.
+  // Faster clock cuts AccelRead from ~2.5 ms down to roughly 0.6–1.0 ms.
+#if defined(APDS_SDA_PIN) && defined(APDS_SCL_PIN)
+  Wire.begin(APDS_SDA_PIN, APDS_SCL_PIN);
+#else
+  Wire.begin(); // fall back to default pins if board defines are missing
+#endif
+  Wire.setClock(400000); // Fast Mode – safe for LIS3DH and APDS9960
+  // -----------------------------------------------------------
 
 #if PERF_SELF_TEST
   runPerfSelfTest();
