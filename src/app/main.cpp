@@ -5256,13 +5256,37 @@ static void renderPlasmaFaceView()
 
 static void renderBsodView()
 {
-  dma_display->fillScreen(dma_display->color565(0, 0, 255));
-  dma_display->setTextColor(dma_display->color565(255, 255, 255));
-  dma_display->setTextSize(2);
-  dma_display->setCursor(5, 15);
+  const uint16_t blue  = dma_display->color565(0, 120, 215);
+  const uint16_t white = dma_display->color565(255, 255, 255);
+
+  dma_display->fillScreen(blue);
+  dma_display->setTextColor(white);
+
+  // Left panel
+  dma_display->setTextSize(3);
+  dma_display->setCursor(6, 18);
   dma_display->print(":(");
-  dma_display->setCursor(69, 15);
+
+  dma_display->setTextSize(0);
+  dma_display->setCursor(24,12);
+  dma_display->print("PROTOGEN");
+  dma_display->setCursor(23, 18);
+  dma_display->print("ran into a");
+  dma_display->setCursor(26, 24);
+  dma_display->print("problem");
+
+  // Right panel — reverse the strings so they read correctly when mirrored
+  dma_display->setTextSize(3);
+  dma_display->setCursor(64 + 6, 18);
   dma_display->print(":(");
+
+  dma_display->setTextSize(0);
+  dma_display->setCursor(64 + 24,12);
+  dma_display->print("PROTOGEN");
+  dma_display->setCursor(64 + 23, 18);
+  dma_display->print("ran into a");
+  dma_display->setCursor(64 + 26, 24);
+  dma_display->print("problem");
 }
 
 static void renderFlameEffectView()
@@ -5533,7 +5557,7 @@ void displayCurrentView(int view)
     renderer();
   }
 
-  if (blushState != BlushState::Inactive)
+  if (blushState != BlushState::Inactive && view != VIEW_BSOD)
   {
     drawBlush();
   }
